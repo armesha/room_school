@@ -23,6 +23,5 @@ Room Reservation System je webová aplikace vyvinutá pomocí **ASP.NET Core Web
 
 4. **Správa uživatelů (pro Administrátory)**
    - Administrátoři mohou spravovat uživatele pomocí endpointů `GET /api/users`, `PUT /api/users/{id}` a `DELETE /api/users/{id}`.
-
-5. **Komunikace a správa souborů**
-   - Použijte příslušné endpointy pro zasílání zpráv a správu souborů.
+  
+...
