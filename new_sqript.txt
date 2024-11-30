@@ -467,3 +467,53 @@ COMMIT;
 -- ================================================================
 -- 10. End of Script
 -- ================================================================
+
+-- Создаем временную таблицу для хранения файла
+CREATE TABLE temp_images (
+    id NUMBER PRIMARY KEY,
+    image_data BLOB
+);
+
+-- Создаем процедуру для обновления фотографий
+CREATE OR REPLACE PROCEDURE update_room_photos AS
+BEGIN
+    -- Обновляем фотографии для комнат с id от 1 до 20
+    FOR i IN 1..20 LOOP
+        UPDATE rooms
+        SET image = (SELECT image_data FROM temp_images WHERE id = 1)
+        WHERE room_id = i;
+    END LOOP;
+    COMMIT;
+END;
+/
+
+BEGIN
+    update_room_photos();
+END;
+/
+
+
+-- Создаем временную таблицу для хранения фото зданий
+CREATE TABLE temp_building_images (
+    id NUMBER PRIMARY KEY,
+    image_data BLOB
+);
+
+-- Создаем процедуру для обновления фотографий зданий
+CREATE OR REPLACE PROCEDURE update_building_photos AS
+BEGIN
+    -- Обновляем фотографии для зданий с id от 1 до 20
+    FOR i IN 1..20 LOOP
+        UPDATE buildings
+        SET image = (SELECT image_data FROM temp_building_images WHERE id = 1)
+        WHERE building_id = i;
+    END LOOP;
+    COMMIT;
+END;
+/
+
+-- Запускаем процедуру
+BEGIN
+    update_building_photos();
+END;
+/
