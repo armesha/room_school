@@ -268,6 +268,41 @@ FROM room_equipment re
 JOIN rooms r ON re.room_id = r.room_id
 JOIN equipment e ON re.equipment_id = e.equipment_id;
 
+-- Hierarchical View for Building-Room Structure
+CREATE OR REPLACE VIEW v_building_room_hierarchy AS
+WITH RECURSIVE building_rooms AS (
+    SELECT b.building_id,
+           b.building_name,
+           CAST(NULL AS NUMBER) as room_id,
+           CAST(NULL AS VARCHAR2(20)) as room_number,
+           CAST(NULL AS NUMBER) as capacity,
+           CAST(NULL AS NUMBER) as price,
+           1 as level,
+           b.building_name as path
+    FROM buildings b
+    UNION ALL
+    SELECT b.building_id,
+           b.building_name,
+           r.room_id,
+           r.room_number,
+           r.capacity,
+           r.price,
+           2 as level,
+           b.building_name || ' -> ' || r.room_number as path
+    FROM buildings b
+    JOIN rooms r ON b.building_id = r.building_id
+)
+SELECT building_id,
+       building_name,
+       room_id,
+       room_number,
+       capacity,
+       price,
+       level,
+       path
+FROM building_rooms
+ORDER BY building_id, level, room_number;
+
 -- ============================
 -- 4. Create Functions
 -- ============================
@@ -512,6 +547,95 @@ BEGIN
         VALUES (
             seq_logs.NEXTVAL, :NEW.room_id, 'Room image updated', SYSDATE
         );
+    END IF;
+END;
+/
+    
+-- User Validation Trigger
+CREATE OR REPLACE TRIGGER trg_validate_user
+BEFORE INSERT OR UPDATE ON users
+FOR EACH ROW
+DECLARE
+    v_email_pattern VARCHAR2(255) := '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$';
+BEGIN
+    -- Email validation
+    IF NOT REGEXP_LIKE(:NEW.email, v_email_pattern) THEN
+        raise_application_error(-20001, 'Invalid email format');
+    END IF;
+    
+    -- Username validation (at least 3 characters, alphanumeric)
+    IF NOT REGEXP_LIKE(:NEW.username, '^[A-Za-z0-9]{3,}$') THEN
+        raise_application_error(-20002, 'Username must be at least 3 characters long and contain only letters and numbers');
+    END IF;
+    
+    -- Password validation (at least 8 characters, must contain number and special character)
+    IF NOT REGEXP_LIKE(:NEW.password_hash, '^.*(?=.{8,})(?=.*\d)(?=.*[!@#$%^&*]).*$') THEN
+        raise_application_error(-20003, 'Password must be at least 8 characters long and contain at least one number and one special character');
+    END IF;
+END;
+/
+    
+-- Room Validation Trigger
+CREATE OR REPLACE TRIGGER trg_validate_room
+BEFORE INSERT OR UPDATE ON rooms
+FOR EACH ROW
+BEGIN
+    -- Capacity validation
+    IF :NEW.capacity <= 0 THEN
+        raise_application_error(-20004, 'Room capacity must be positive');
+    END IF;
+    
+    -- Price validation
+    IF :NEW.price <= 0 THEN
+        raise_application_error(-20005, 'Room price must be positive');
+    END IF;
+    
+    -- Room number format validation (alphanumeric)
+    IF NOT REGEXP_LIKE(:NEW.room_number, '^[A-Za-z0-9-]{1,20}$') THEN
+        raise_application_error(-20006, 'Invalid room number format');
+    END IF;
+END;
+/
+    
+-- Booking Validation Trigger
+CREATE OR REPLACE TRIGGER trg_validate_booking
+BEFORE INSERT OR UPDATE ON bookings
+FOR EACH ROW
+DECLARE
+    v_existing_bookings NUMBER;
+    v_max_duration_hours NUMBER := 8; -- Maximum booking duration in hours
+BEGIN
+    -- Start time must be before end time
+    IF :NEW.start_time >= :NEW.end_time THEN
+        raise_application_error(-20007, 'Start time must be before end time');
+    END IF;
+    
+    -- Booking must be in the future
+    IF :NEW.booking_date < TRUNC(SYSDATE) THEN
+        raise_application_error(-20008, 'Cannot book for past dates');
+    END IF;
+    
+    -- Check booking duration
+    IF (:NEW.end_time - :NEW.start_time) * 24 > v_max_duration_hours THEN
+        raise_application_error(-20009, 'Booking duration cannot exceed ' || v_max_duration_hours || ' hours');
+    END IF;
+    
+    -- Check for overlapping bookings
+    SELECT COUNT(*)
+    INTO v_existing_bookings
+    FROM bookings
+    WHERE room_id = :NEW.room_id
+    AND booking_date = :NEW.booking_date
+    AND status = 'Confirmed'
+    AND (
+        (:NEW.start_time BETWEEN start_time AND end_time)
+        OR (:NEW.end_time BETWEEN start_time AND end_time)
+        OR (start_time BETWEEN :NEW.start_time AND :NEW.end_time)
+    )
+    AND booking_id != NVL(:NEW.booking_id, 0);
+    
+    IF v_existing_bookings > 0 THEN
+        raise_application_error(-20010, 'Room is already booked for this time period');
     END IF;
 END;
 /
