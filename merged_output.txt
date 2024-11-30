@@ -1,0 +1,2296 @@
+-- ============================
+-- 1. Create Sequences
+-- ============================
+
+-- Sequence for Users
+CREATE SEQUENCE seq_users
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Roles
+CREATE SEQUENCE seq_roles
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Buildings
+CREATE SEQUENCE seq_buildings
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Rooms
+CREATE SEQUENCE seq_rooms
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Bookings
+CREATE SEQUENCE seq_bookings
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Equipment
+CREATE SEQUENCE seq_equipment
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Discounts
+CREATE SEQUENCE seq_discounts
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Events
+CREATE SEQUENCE seq_events
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Messages
+CREATE SEQUENCE seq_messages
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Files
+CREATE SEQUENCE seq_files
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Logs
+CREATE SEQUENCE seq_logs
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Invoices
+CREATE SEQUENCE seq_invoices
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- ============================
+-- 2. Create Tables
+-- ============================
+
+-- Table: Roles (Reference Table)
+CREATE TABLE roles (
+    role_id NUMBER PRIMARY KEY,
+    role_name VARCHAR2(50) NOT NULL UNIQUE
+);
+
+-- Insert reference data into Roles
+INSERT INTO roles (role_id, role_name) VALUES (seq_roles.NEXTVAL, 'Administrator');
+INSERT INTO roles (role_id, role_name) VALUES (seq_roles.NEXTVAL, 'Registered User');
+INSERT INTO roles (role_id, role_name) VALUES (seq_roles.NEXTVAL, 'Unauthenticated User');
+
+-- Table: Users
+CREATE TABLE users (
+    user_id NUMBER PRIMARY KEY,
+    username VARCHAR2(50) NOT NULL UNIQUE,
+    password_hash VARCHAR2(255) NOT NULL,
+    email VARCHAR2(100) NOT NULL UNIQUE,
+    role_id NUMBER NOT NULL,
+    registration_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_users_roles FOREIGN KEY (role_id) REFERENCES roles(role_id)
+);
+
+-- Table: Buildings (Reference Table)
+CREATE TABLE buildings (
+    building_id NUMBER PRIMARY KEY,
+    building_name VARCHAR2(100) NOT NULL UNIQUE,
+    address VARCHAR2(255) NOT NULL,
+    description VARCHAR2(500),
+    image BLOB -- Changed from VARCHAR2(255) to BLOB for image storage
+);
+
+-- Table: Rooms
+CREATE TABLE rooms (
+    room_id NUMBER PRIMARY KEY,
+    building_id NUMBER NOT NULL,
+    room_number VARCHAR2(20) NOT NULL,
+    capacity NUMBER NOT NULL,
+    has_projector CHAR(1) DEFAULT 'N',
+    has_whiteboard CHAR(1) DEFAULT 'N',
+    description VARCHAR2(500),
+    image BLOB, -- Changed from VARCHAR2(255) to BLOB for image storage
+    price NUMBER(10,2) NOT NULL,
+    CONSTRAINT fk_rooms_buildings FOREIGN KEY (building_id) REFERENCES buildings(building_id),
+    CONSTRAINT uq_rooms_building_room UNIQUE (building_id, room_number)
+);
+
+-- Table: Equipment
+CREATE TABLE equipment (
+    equipment_id NUMBER PRIMARY KEY,
+    equipment_name VARCHAR2(100) NOT NULL UNIQUE
+);
+
+-- Table: Room_Equipment (Associative Table)
+CREATE TABLE room_equipment (
+    room_id NUMBER,
+    equipment_id NUMBER,
+    PRIMARY KEY (room_id, equipment_id),
+    CONSTRAINT fk_room_eq_rooms FOREIGN KEY (room_id) REFERENCES rooms(room_id),
+    CONSTRAINT fk_room_eq_equipment FOREIGN KEY (equipment_id) REFERENCES equipment(equipment_id)
+);
+
+-- Table: Bookings
+CREATE TABLE bookings (
+    booking_id NUMBER PRIMARY KEY,
+    user_id NUMBER NOT NULL,
+    room_id NUMBER NOT NULL,
+    booking_date DATE NOT NULL,
+    start_time DATE NOT NULL,
+    end_time DATE NOT NULL,
+    status VARCHAR2(20) DEFAULT 'Pending',
+    CONSTRAINT fk_bookings_users FOREIGN KEY (user_id) REFERENCES users(user_id),
+    CONSTRAINT fk_bookings_rooms FOREIGN KEY (room_id) REFERENCES rooms(room_id)
+);
+
+-- Table: Discounts
+CREATE TABLE discounts (
+    discount_id NUMBER PRIMARY KEY,
+    discount_code VARCHAR2(50) NOT NULL UNIQUE,
+    description VARCHAR2(255),
+    percentage NUMBER(5,2) NOT NULL CHECK (percentage > 0 AND percentage <= 100),
+    valid_from DATE NOT NULL,
+    valid_to DATE NOT NULL
+);
+
+-- Table: Events
+CREATE TABLE events (
+    event_id NUMBER PRIMARY KEY,
+    event_name VARCHAR2(100) NOT NULL,
+    event_date DATE NOT NULL,
+    description VARCHAR2(500)
+);
+
+-- Table: Messages
+CREATE TABLE messages (
+    message_id NUMBER PRIMARY KEY,
+    sender_id NUMBER NOT NULL,
+    receiver_id NUMBER NOT NULL,
+    subject VARCHAR2(255),
+    body CLOB,
+    sent_at DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_messages_sender FOREIGN KEY (sender_id) REFERENCES users(user_id),
+    CONSTRAINT fk_messages_receiver FOREIGN KEY (receiver_id) REFERENCES users(user_id)
+);
+
+-- Table: Files
+CREATE TABLE files (
+    file_id NUMBER PRIMARY KEY,
+    uploaded_by NUMBER NOT NULL,
+    file_name VARCHAR2(255) NOT NULL,
+    file_type VARCHAR2(50),
+    file_extension VARCHAR2(10),
+    upload_date DATE DEFAULT SYSDATE,
+    modification_date DATE,
+    operation VARCHAR2(50),
+    file_content BLOB,
+    CONSTRAINT fk_files_users FOREIGN KEY (uploaded_by) REFERENCES users(user_id)
+);
+
+-- Table: Logs
+CREATE TABLE logs (
+    log_id NUMBER PRIMARY KEY,
+    user_id NUMBER,
+    action VARCHAR2(255),
+    log_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_logs_users FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+-- Table: User_History
+CREATE TABLE user_history (
+    history_id NUMBER PRIMARY KEY,
+    user_id NUMBER NOT NULL,
+    action VARCHAR2(255),
+    action_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_history_users FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+-- Table: Invoices
+CREATE TABLE invoices (
+    invoice_id NUMBER PRIMARY KEY,
+    invoice_number VARCHAR2(50) NOT NULL UNIQUE,
+    booking_id NUMBER NOT NULL,
+    user_id NUMBER NOT NULL,
+    amount NUMBER(10,2) NOT NULL,
+    payment_location VARCHAR2(255) NOT NULL,
+    invoice_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_invoices_bookings FOREIGN KEY (booking_id) REFERENCES bookings(booking_id),
+    CONSTRAINT fk_invoices_users FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+-- ============================
+-- 3. Create Views
+-- ============================
+
+-- View: v_available_rooms
+CREATE VIEW v_available_rooms AS
+SELECT r.room_id, r.room_number, b.building_name, r.capacity, r.has_projector, r.has_whiteboard
+FROM rooms r
+JOIN buildings b ON r.building_id = b.building_id
+WHERE r.room_id NOT IN (
+    SELECT room_id FROM bookings
+    WHERE booking_date = TRUNC(SYSDATE)
+      AND status = 'Confirmed'
+);
+
+-- View: v_user_bookings
+CREATE VIEW v_user_bookings AS
+SELECT u.username, r.room_number, b.booking_date, b.start_time, b.end_time, b.status
+FROM bookings b
+JOIN users u ON b.user_id = u.user_id
+JOIN rooms r ON b.room_id = r.room_id;
+
+-- View: v_room_equipment
+CREATE VIEW v_room_equipment AS
+SELECT r.room_number, e.equipment_name
+FROM room_equipment re
+JOIN rooms r ON re.room_id = r.room_id
+JOIN equipment e ON re.equipment_id = e.equipment_id;
+
+-- ============================
+-- 4. Create Functions
+-- ============================
+
+-- Function 1: Calculate Discounted Price
+CREATE OR REPLACE FUNCTION fn_calculate_discount(p_original_price NUMBER, p_discount_code VARCHAR2)
+RETURN NUMBER
+IS
+    v_discount_percentage NUMBER;
+BEGIN
+    SELECT percentage INTO v_discount_percentage
+    FROM discounts
+    WHERE discount_code = p_discount_code
+      AND SYSDATE BETWEEN valid_from AND valid_to;
+
+    RETURN p_original_price - (p_original_price * v_discount_percentage / 100);
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN p_original_price; -- No discount applied
+END fn_calculate_discount;
+/
+    
+-- Function 2: Get User Role
+CREATE OR REPLACE FUNCTION fn_get_user_role(p_user_id NUMBER)
+RETURN VARCHAR2
+IS
+    v_role_name VARCHAR2(50);
+BEGIN
+    SELECT r.role_name INTO v_role_name
+    FROM users u
+    JOIN roles r ON u.role_id = r.role_id
+    WHERE u.user_id = p_user_id;
+
+    RETURN v_role_name;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN 'Unknown';
+END fn_get_user_role;
+/
+    
+-- Function 3: Calculate Room Utilization
+CREATE OR REPLACE FUNCTION fn_room_utilization(p_room_id NUMBER, p_start_date DATE, p_end_date DATE)
+RETURN NUMBER
+IS
+    total_booked_hours NUMBER := 0;
+    total_available_hours NUMBER := 0;
+BEGIN
+    FOR booking IN (
+        SELECT start_time, end_time
+        FROM bookings
+        WHERE room_id = p_room_id
+          AND booking_date BETWEEN p_start_date AND p_end_date
+          AND status = 'Confirmed'
+    ) LOOP
+        total_booked_hours := total_booked_hours + 
+            ((booking.end_time - booking.start_time) * 24);
+    END LOOP;
+
+    -- Assuming room is available from 8 AM to 8 PM each day (12 hours)
+    total_available_hours := (TRUNC(p_end_date) - TRUNC(p_start_date) + 1) * 12;
+
+    IF total_available_hours = 0 THEN
+        RETURN 0;
+    ELSE
+        RETURN ROUND((total_booked_hours / total_available_hours) * 100, 2);
+    END IF;
+END fn_room_utilization;
+/
+
+-- ============================
+-- 5. Create Stored Procedures
+-- ============================
+
+-- Procedure 1: Add New Room
+CREATE OR REPLACE PROCEDURE sp_add_room (
+    p_building_id IN NUMBER,
+    p_room_number IN VARCHAR2,
+    p_capacity IN NUMBER,
+    p_has_projector IN CHAR,
+    p_has_whiteboard IN CHAR,
+    p_description IN VARCHAR2,
+    p_image IN BLOB, -- Updated to accept BLOB type
+    p_price IN NUMBER
+)
+AS
+BEGIN
+    INSERT INTO rooms (
+        room_id, building_id, room_number, capacity, has_projector, 
+        has_whiteboard, description, image, price
+    )
+    VALUES (
+        seq_rooms.NEXTVAL, p_building_id, p_room_number, p_capacity, 
+        p_has_projector, p_has_whiteboard, p_description, p_image, p_price
+    );
+    COMMIT;
+END sp_add_room;
+/
+
+-- Procedure 2: Update Booking Status
+CREATE OR REPLACE PROCEDURE sp_update_booking_status (
+    p_booking_id IN NUMBER,
+    p_status IN VARCHAR2
+)
+AS
+BEGIN
+    UPDATE bookings
+    SET status = p_status
+    WHERE booking_id = p_booking_id;
+    COMMIT;
+END sp_update_booking_status;
+/
+
+-- Procedure 3: Assign Equipment to Room
+CREATE OR REPLACE PROCEDURE sp_assign_equipment (
+    p_room_id IN NUMBER,
+    p_equipment_id IN NUMBER
+)
+AS
+BEGIN
+    INSERT INTO room_equipment (room_id, equipment_id)
+    VALUES (p_room_id, p_equipment_id);
+    COMMIT;
+END sp_assign_equipment;
+/
+
+-- Procedure 4: Delete User
+CREATE OR REPLACE PROCEDURE sp_delete_user (
+    p_user_id IN NUMBER
+)
+AS
+BEGIN
+    DELETE FROM users WHERE user_id = p_user_id;
+    COMMIT;
+END sp_delete_user;
+/
+
+-- Procedure 5: Create Invoice (Refined)
+CREATE OR REPLACE PROCEDURE sp_create_invoice (
+    p_booking_id IN NUMBER,
+    p_payment_location IN VARCHAR2
+)
+AS
+    v_user_id NUMBER;
+    v_room_price NUMBER;
+    v_start_time DATE;
+    v_end_time DATE;
+    v_hours NUMBER;
+    v_amount NUMBER;
+    v_invoice_number VARCHAR2(50);
+BEGIN
+    -- Retrieve user_id, room price, start_time, and end_time from booking
+    SELECT b.user_id, r.price, b.start_time, b.end_time
+    INTO v_user_id, v_room_price, v_start_time, v_end_time
+    FROM bookings b
+    JOIN rooms r ON b.room_id = r.room_id
+    WHERE b.booking_id = p_booking_id;
+
+    -- Calculate the total hours booked
+    v_hours := (v_end_time - v_start_time) * 24;
+
+    -- Calculate the total amount
+    v_amount := v_room_price * v_hours;
+
+    -- Generate invoice number
+    v_invoice_number := 'INV' || TO_CHAR(seq_invoices.NEXTVAL, 'FM0000');
+
+    INSERT INTO invoices (
+        invoice_id, invoice_number, booking_id, user_id, amount, payment_location
+    )
+    VALUES (
+        seq_invoices.NEXTVAL, v_invoice_number, p_booking_id, v_user_id, v_amount, p_payment_location
+    );
+
+    COMMIT;
+END sp_create_invoice;
+/
+
+-- ============================
+-- 6. Create Triggers
+-- ============================
+
+-- Trigger 1: Before Insert on Bookings to Set Status
+CREATE OR REPLACE TRIGGER trg_before_insert_booking
+BEFORE INSERT ON bookings
+FOR EACH ROW
+BEGIN
+    IF :NEW.status IS NULL THEN
+        :NEW.status := 'Pending';
+    END IF;
+END;
+/
+    
+-- Trigger 2: After Insert on Bookings to Create Invoice
+CREATE OR REPLACE TRIGGER trg_after_insert_booking
+AFTER INSERT ON bookings
+FOR EACH ROW
+BEGIN
+    -- Call the procedure to create an invoice
+    sp_create_invoice(:NEW.booking_id, 'Online Payment');
+END;
+/
+    
+-- Trigger 3: After Update on Users to Log Changes
+CREATE OR REPLACE TRIGGER trg_after_update_users
+AFTER UPDATE ON users
+FOR EACH ROW
+BEGIN
+    INSERT INTO logs (
+        log_id, user_id, action, log_date
+    )
+    VALUES (
+        seq_logs.NEXTVAL, :NEW.user_id, 'User updated', SYSDATE
+    );
+END;
+/
+    
+-- Trigger 4: After Update on Buildings Image to Log Changes
+CREATE OR REPLACE TRIGGER trg_after_update_buildings_image
+AFTER UPDATE ON buildings
+FOR EACH ROW
+BEGIN
+    IF DBMS_LOB.COMPARE(:OLD.image, :NEW.image) != 0 THEN
+        INSERT INTO logs (
+            log_id, user_id, action, log_date
+        )
+        VALUES (
+            seq_logs.NEXTVAL, :NEW.building_id, 'Building image updated', SYSDATE
+        );
+    END IF;
+END;
+/
+    
+-- Trigger 5: After Update on Rooms Image to Log Changes
+CREATE OR REPLACE TRIGGER trg_after_update_rooms_image
+AFTER UPDATE ON rooms
+FOR EACH ROW
+BEGIN
+    IF DBMS_LOB.COMPARE(:OLD.image, :NEW.image) != 0 THEN
+        INSERT INTO logs (
+            log_id, user_id, action, log_date
+        )
+        VALUES (
+            seq_logs.NEXTVAL, :NEW.room_id, 'Room image updated', SYSDATE
+        );
+    END IF;
+END;
+/
+    
+-- ============================
+-- 7. Create Additional Indexes (Optional)
+-- ============================
+
+-- Example: Index on Bookings booking_date
+CREATE INDEX idx_bookings_date ON bookings(booking_date);
+
+-- ============================
+-- 8. Populate Reference Tables with Sample Data
+-- ============================
+
+-- Insert sample data into Buildings
+INSERT INTO buildings (building_id, building_name, address, description, image) 
+VALUES (seq_buildings.NEXTVAL, 'Main Building', '123 Main St', 'The central hub for all activities.', EMPTY_BLOB());
+INSERT INTO buildings (building_id, building_name, address, description, image) 
+VALUES (seq_buildings.NEXTVAL, 'Science Hall', '456 Science Rd', 'Equipped with advanced laboratories.', EMPTY_BLOB());
+INSERT INTO buildings (building_id, building_name, address, description, image) 
+VALUES (seq_buildings.NEXTVAL, 'Library', '789 Library Ln', 'Filled with extensive resources.', EMPTY_BLOB());
+
+-- Insert sample data into Rooms
+INSERT INTO rooms (room_id, building_id, room_number, capacity, has_projector, has_whiteboard, description, image, price) 
+VALUES (seq_rooms.NEXTVAL, 1, '101', 50, 'Y', 'Y', 'Large conference room with seating for 50.', EMPTY_BLOB(), 200.00);
+INSERT INTO rooms (room_id, building_id, room_number, capacity, has_projector, has_whiteboard, description, image, price) 
+VALUES (seq_rooms.NEXTVAL, 2, '202', 30, 'N', 'Y', 'Mid-sized meeting room without projector.', EMPTY_BLOB(), 150.00);
+
+-- Insert sample data into Equipment
+INSERT INTO equipment (equipment_id, equipment_name) VALUES (seq_equipment.NEXTVAL, 'Projector');
+INSERT INTO equipment (equipment_id, equipment_name) VALUES (seq_equipment.NEXTVAL, 'Whiteboard');
+INSERT INTO equipment (equipment_id, equipment_name) VALUES (seq_equipment.NEXTVAL, 'Conference Phone');
+INSERT INTO equipment (equipment_id, equipment_name) VALUES (seq_equipment.NEXTVAL, 'HDMI Cable');
+
+-- Insert sample data into Discounts
+INSERT INTO discounts (discount_id, discount_code, description, percentage, valid_from, valid_to)
+VALUES (seq_discounts.NEXTVAL, 'WELCOME10', '10% off for new users', 10, TO_DATE('2024-01-01', 'YYYY-MM-DD'), TO_DATE('2024-12-31', 'YYYY-MM-DD'));
+
+INSERT INTO discounts (discount_id, discount_code, description, percentage, valid_from, valid_to)
+VALUES (seq_discounts.NEXTVAL, 'SPRING20', '20% off for spring bookings', 20, TO_DATE('2024-03-01', 'YYYY-MM-DD'), TO_DATE('2024-05-31', 'YYYY-MM-DD'));
+
+-- Commit all inserts
+COMMIT;
+
+-- ============================
+-- 9. Grant Necessary Privileges (Optional)
+-- ============================
+
+-- Example: Grant SELECT, INSERT, UPDATE, DELETE on tables to a specific role or user
+-- Replace 'app_user' with your application user/schema
+
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON users TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON roles TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON buildings TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON rooms TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON equipment TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON room_equipment TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON bookings TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON discounts TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON events TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON messages TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON files TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON logs TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON user_history TO app_user;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON invoices TO app_user;
+
+-- ================================================================
+-- 10. End of Script
+-- ================================================================
+// Services/BookingService.cs
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Repositories;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Services
+{
+    public class BookingService : IBookingService
+    {
+        private readonly IBookingRepository _bookingRepository;
+
+        public BookingService(IBookingRepository bookingRepository)
+        {
+            _bookingRepository = bookingRepository;
+        }
+
+        public IEnumerable<Booking> GetAllBookingsForAdmin()
+        {
+            return _bookingRepository.GetAllBookings();
+        }
+
+        public IEnumerable<Booking> GetAllBookingsForUser(int userId)
+        {
+            return _bookingRepository.GetBookingsByUserId(userId);
+        }
+
+        public Booking GetBookingById(int bookingId)
+        {
+            return _bookingRepository.GetBookingById(bookingId);
+        }
+
+        public void AddBooking(Booking booking)
+        {
+            _bookingRepository.AddBooking(booking);
+        }
+
+        public void UpdateBooking(Booking booking)
+        {
+            _bookingRepository.UpdateBooking(booking);
+        }
+
+        public void DeleteBooking(int bookingId)
+        {
+            _bookingRepository.DeleteBooking(bookingId);
+        }
+    }
+}
+
+// Services/BuildingService.cs
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Repositories;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Services
+{
+    public class BuildingService : IBuildingService
+    {
+        private readonly IBuildingRepository _buildingRepository;
+
+        public BuildingService(IBuildingRepository buildingRepository)
+        {
+            _buildingRepository = buildingRepository;
+        }
+
+        public IEnumerable<Building> GetAllBuildings()
+        {
+            return _buildingRepository.GetAllBuildings();
+        }
+
+        public Building GetBuildingById(int buildingId)
+        {
+            return _buildingRepository.GetBuildingById(buildingId);
+        }
+
+        public void AddBuilding(Building building)
+        {
+            _buildingRepository.AddBuilding(building);
+        }
+
+        public void UpdateBuilding(Building building)
+        {
+            _buildingRepository.UpdateBuilding(building);
+        }
+
+        public void DeleteBuilding(int buildingId)
+        {
+            _buildingRepository.DeleteBuilding(buildingId);
+        }
+    }
+}
+
+// Services/DatabaseObjectsService.cs
+using RoomReservationSystem.Repositories;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Services
+{
+    public class DatabaseObjectsService : IDatabaseObjectsService
+    {
+        private readonly IDatabaseObjectsRepository _databaseObjectsRepository;
+
+        public DatabaseObjectsService(IDatabaseObjectsRepository databaseObjectsRepository)
+        {
+            _databaseObjectsRepository = databaseObjectsRepository;
+        }
+
+        public IEnumerable<string> GetAllDatabaseObjects()
+        {
+            return _databaseObjectsRepository.GetAllDatabaseObjects();
+        }
+
+        public IEnumerable<string> GetDatabaseObjectsByName(string name)
+        {
+            return _databaseObjectsRepository.GetDatabaseObjectsByName(name);
+        }
+    }
+}
+
+// Services/FileService.cs
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Repositories;
+using System.Collections.Generic;
+
+// Alias for the custom File model
+using FileModel = RoomReservationSystem.Models.File;
+
+namespace RoomReservationSystem.Services
+{
+    public class FileService : IFileService
+    {
+        private readonly IFileRepository _fileRepository;
+
+        public FileService(IFileRepository fileRepository)
+        {
+            _fileRepository = fileRepository;
+        }
+
+        public IEnumerable<FileModel> GetAllFilesForUser(int userId)
+        {
+            return _fileRepository.GetAllFilesForUser(userId);
+        }
+
+        public FileModel GetFileById(int fileId)
+        {
+            return _fileRepository.GetFileById(fileId);
+        }
+
+        public void UploadFile(FileModel file)
+        {
+            _fileRepository.AddFile(file);
+        }
+
+        public void DeleteFile(int fileId)
+        {
+            _fileRepository.DeleteFile(fileId);
+        }
+    }
+}
+
+// Services/IBookingService.cs
+using RoomReservationSystem.Models;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Services
+{
+    public interface IBookingService
+    {
+        IEnumerable<Booking> GetAllBookingsForAdmin();
+        IEnumerable<Booking> GetAllBookingsForUser(int userId);
+        Booking GetBookingById(int bookingId);
+        void AddBooking(Booking booking);
+        void UpdateBooking(Booking booking);
+        void DeleteBooking(int bookingId);
+    }
+}
+
+// Services/IBuildingService.cs
+using RoomReservationSystem.Models;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Services
+{
+    public interface IBuildingService
+    {
+        IEnumerable<Building> GetAllBuildings();
+        Building GetBuildingById(int buildingId);
+        void AddBuilding(Building building);
+        void UpdateBuilding(Building building);
+        void DeleteBuilding(int buildingId);
+    }
+}
+
+// Services/IDatabaseObjectsService.cs
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Services
+{
+    public interface IDatabaseObjectsService
+    {
+        IEnumerable<string> GetAllDatabaseObjects();
+        IEnumerable<string> GetDatabaseObjectsByName(string name);
+    }
+}
+
+// Services/IFileService.cs
+using RoomReservationSystem.Models;
+using System.Collections.Generic;
+
+// Alias for the custom File model
+using FileModel = RoomReservationSystem.Models.File;
+
+namespace RoomReservationSystem.Services
+{
+    public interface IFileService
+    {
+        IEnumerable<FileModel> GetAllFilesForUser(int userId);
+        FileModel GetFileById(int fileId);
+        void UploadFile(FileModel file);
+        void DeleteFile(int fileId);
+    }
+}
+
+// Services/IMessageService.cs
+using RoomReservationSystem.Models;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Services
+{
+    public interface IMessageService
+    {
+        IEnumerable<Message> GetMessagesForUser(int userId);
+        IEnumerable<Message> GetAllMessages(); // Added for Admin
+        void SendMessage(Message message);
+    }
+}
+
+// Services/IUserService.cs
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Models.Auth;
+
+namespace RoomReservationSystem.Services
+{
+    public interface IUserService
+    {
+        RegisterResponse Register(RegisterRequest request);
+        LoginResponse Authenticate(LoginRequest request);
+    }
+}
+
+// Services/MessageService.cs
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Repositories;
+using System;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Services
+{
+    public class MessageService : IMessageService
+    {
+        private readonly IMessageRepository _messageRepository;
+
+        public MessageService(IMessageRepository messageRepository)
+        {
+            _messageRepository = messageRepository;
+        }
+
+        public IEnumerable<Message> GetMessagesForUser(int userId)
+        {
+            return _messageRepository.GetMessagesByUserId(userId);
+        }
+
+        public IEnumerable<Message> GetAllMessages()
+        {
+            return _messageRepository.GetAllMessages();
+        }
+
+        public void SendMessage(Message message)
+        {
+            message.SentAt = DateTime.UtcNow;
+            _messageRepository.AddMessage(message);
+        }
+    }
+}
+
+// Services/UserService.cs
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Models.Auth;
+using RoomReservationSystem.Repositories;
+using RoomReservationSystem.Utilities;
+using System;
+
+namespace RoomReservationSystem.Services
+{
+    public class UserService : IUserService
+    {
+        private readonly IUserRepository _userRepository;
+        private readonly IRoleRepository _roleRepository;
+        private readonly JwtTokenGenerator _tokenGenerator;
+
+        public UserService(IUserRepository userRepository, IRoleRepository roleRepository, JwtTokenGenerator tokenGenerator)
+        {
+            _userRepository = userRepository;
+            _roleRepository = roleRepository;
+            _tokenGenerator = tokenGenerator;
+        }
+
+        public RegisterResponse Register(RegisterRequest request)
+        {
+            // Check if username or email already exists
+            var existingUser = _userRepository.GetUserByUsername(request.Username);
+            if (existingUser != null)
+            {
+                return new RegisterResponse { Success = false, Message = "Username already exists." };
+            }
+
+            // Assign 'Registered User' role by default
+            var role = _roleRepository.GetRoleByName("Registered User");
+            if (role == null)
+            {
+                return new RegisterResponse { Success = false, Message = "User role not found." };
+            }
+
+            // Hash password
+            var hashedPassword = PasswordHasher.HashPassword(request.Password);
+
+            // Create user
+            var user = new User
+            {
+                Username = request.Username,
+                PasswordHash = hashedPassword,
+                Email = request.Email,
+                RoleId = role.RoleId,
+                RegistrationDate = DateTime.UtcNow
+            };
+
+            _userRepository.AddUser(user);
+
+            return new RegisterResponse { Success = true, Message = "Registration successful." };
+        }
+
+        public LoginResponse Authenticate(LoginRequest request)
+        {
+            var user = _userRepository.GetUserByUsername(request.Username);
+            if (user == null)
+                return null;
+
+            if (!PasswordHasher.VerifyPassword(request.Password, user.PasswordHash))
+                return null;
+
+            var role = _roleRepository.GetRoleById(user.RoleId);
+            if (role == null)
+                return null;
+
+            var loginResponse = new LoginResponse
+            {
+                Username = user.Username,
+                Role = role.RoleName,
+                UserId = user.UserId // Populate UserId
+            };
+
+            // Generate JWT Token
+            loginResponse.Token = _tokenGenerator.GenerateToken(loginResponse);
+
+            return loginResponse;
+        }
+    }
+}
+
+// Models/Booking.cs
+using System;
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models
+{
+    public class Booking
+    {
+        public int BookingId { get; set; }
+
+        [Required]
+        public int UserId { get; set; }
+
+        [Required]
+        public int RoomId { get; set; }
+
+        [Required]
+        public DateTime BookingDate { get; set; }
+
+        [Required]
+        public DateTime StartTime { get; set; }
+
+        [Required]
+        public DateTime EndTime { get; set; }
+
+        public string Status { get; set; } // Теперь не [Required], так как устанавливается сервером
+    }
+}
+
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models
+{
+    public class Building
+    {
+        public int BuildingId { get; set; }
+
+        [Required]
+        public string BuildingName { get; set; }
+
+        [Required]
+        public string Address { get; set; }
+
+        public string Description { get; set; }
+
+        // Make Image nullable by adding '?'
+        public byte[]? Image { get; set; } // Image is optional
+    }
+}
+
+// Models/File.cs
+using System;
+
+namespace RoomReservationSystem.Models
+{
+    public class File
+    {
+        public int FileId { get; set; }
+        public int UploadedBy { get; set; }
+        public string FileName { get; set; }
+        public string FileType { get; set; }
+        public string FileExtension { get; set; }
+        public DateTime UploadDate { get; set; }
+        public DateTime? ModificationDate { get; set; }
+        public string Operation { get; set; }
+        public byte[] FileContent { get; set; }
+    }
+}
+
+// Models/Message.cs
+using System;
+
+namespace RoomReservationSystem.Models
+{
+    public class Message
+    {
+        public int MessageId { get; set; }
+        public int SenderId { get; set; }
+        public int ReceiverId { get; set; }
+        public string Subject { get; set; }
+        public string Body { get; set; }
+        public DateTime SentAt { get; set; } // Ensure consistency
+    }
+}
+
+// Models/Role.cs
+namespace RoomReservationSystem.Models
+{
+    public class Role
+    {
+        public int RoleId { get; set; }
+        public string RoleName { get; set; }
+    }
+}
+
+// Models/Room.cs
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models
+{
+    public class Room
+    {
+        public int RoomId { get; set; }
+
+        [Required(ErrorMessage = "BuildingId is required.")]
+        public int BuildingId { get; set; }
+
+        [Required(ErrorMessage = "RoomNumber is required.")]
+        [StringLength(20, ErrorMessage = "RoomNumber cannot exceed 20 characters.")]
+        public string RoomNumber { get; set; }
+
+        [Required(ErrorMessage = "Capacity is required.")]
+        [Range(1, int.MaxValue, ErrorMessage = "Capacity must be at least 1.")]
+        public int Capacity { get; set; }
+
+        public bool HasProjector { get; set; }
+        public bool HasWhiteboard { get; set; }
+
+        [StringLength(500, ErrorMessage = "Description cannot exceed 500 characters.")]
+        public string Description { get; set; }
+
+        // Made Image nullable by using byte[]? and removed [Required] attribute
+        public byte[]? Image { get; set; }
+
+        [Required(ErrorMessage = "Price is required.")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Price must be greater than 0.")]
+        public decimal Price { get; set; } // Ensure Price property is present
+    }
+}
+
+// Models/User.cs
+using System;
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models
+{
+    public class User
+    {
+        public int UserId { get; set; }
+
+        [Required]
+        public string Username { get; set; }
+
+        [Required]
+        public string PasswordHash { get; set; }
+
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; }
+
+        [Required]
+        public int RoleId { get; set; }
+
+        public DateTime RegistrationDate { get; set; }
+    }
+}
+
+// Models/UserResponse.cs
+namespace RoomReservationSystem.Models
+{
+    public class UserResponse
+    {
+        public int UserId { get; set; }
+        public string Username { get; set; }
+        public string Email { get; set; }
+        public string Role { get; set; }
+        public DateTime RegistrationDate { get; set; }
+    }
+}
+
+// Models/UserUpdateRequest.cs
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models
+{
+    public class UserUpdateRequest
+    {
+        [StringLength(50, MinimumLength = 3)]
+        public string Username { get; set; }
+
+        [EmailAddress]
+        public string Email { get; set; }
+
+        public string RoleName { get; set; } // Optional: To change the user's role
+    }
+}
+
+// Models/Auth/LoginRequest.cs
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models.Auth
+{
+    public class LoginRequest
+    {
+        [Required]
+        public string Username { get; set; }
+
+        [Required]
+        public string Password { get; set; }
+    }
+}
+// Models/Auth/LoginResponse.cs
+namespace RoomReservationSystem.Models.Auth
+{
+    public class LoginResponse
+    {
+        public string Token { get; set; }
+        public string Username { get; set; }
+        public string Role { get; set; }
+        public int UserId { get; set; } // Added UserId
+    }
+}
+
+// Models/Auth/RegisterRequest.cs
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models.Auth
+{
+    public class RegisterRequest
+    {
+        [Required]
+        [StringLength(50, MinimumLength = 3)]
+        public string Username { get; set; }
+
+        [Required]
+        [StringLength(100, MinimumLength = 6)]
+        public string Password { get; set; } // Plain text; will be hashed
+
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; }
+    }
+}
+// Models/Auth/RegisterResponse.cs
+namespace RoomReservationSystem.Models.Auth
+{
+    public class RegisterResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+    }
+}
+
+// Models/Auth/LoginRequest.cs
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models.Auth
+{
+    public class LoginRequest
+    {
+        [Required]
+        public string Username { get; set; }
+
+        [Required]
+        public string Password { get; set; }
+    }
+}
+// Models/Auth/LoginResponse.cs
+namespace RoomReservationSystem.Models.Auth
+{
+    public class LoginResponse
+    {
+        public string Token { get; set; }
+        public string Username { get; set; }
+        public string Role { get; set; }
+        public int UserId { get; set; } // Added UserId
+    }
+}
+
+// Models/Auth/RegisterRequest.cs
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models.Auth
+{
+    public class RegisterRequest
+    {
+        [Required]
+        [StringLength(50, MinimumLength = 3)]
+        public string Username { get; set; }
+
+        [Required]
+        [StringLength(100, MinimumLength = 6)]
+        public string Password { get; set; } // Plain text; will be hashed
+
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; }
+    }
+}
+// Models/Auth/RegisterResponse.cs
+namespace RoomReservationSystem.Models.Auth
+{
+    public class RegisterResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+    }
+}
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using RoomReservationSystem.Models.Auth;
+using RoomReservationSystem.Repositories;
+using RoomReservationSystem.Services;
+using RoomReservationSystem.Models; // Ensure this using directive is present
+using System.Security.Claims;
+
+namespace RoomReservationSystem.Controllers
+{
+    [ApiController]
+    [Route("api/auth")]
+    public class AuthController : ControllerBase
+    {
+        private readonly IUserService _userService;
+        private readonly IUserRepository _userRepository;
+        private readonly IRoleRepository _roleRepository;
+
+        public AuthController(IUserService userService, IUserRepository userRepository, IRoleRepository roleRepository)
+        {
+            _userService = userService;
+            _userRepository = userRepository;
+            _roleRepository = roleRepository;
+        }
+
+        // POST: /api/auth/register
+        [HttpPost("register")]
+        public IActionResult Register([FromBody] RegisterRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = _userService.Register(request);
+            if (response.Success)
+            {
+                var user = _userRepository.GetUserByUsername(request.Username);
+                if (user == null)
+                    return BadRequest(new { message = "User registration failed." });
+
+                var role = _roleRepository.GetRoleById(user.RoleId);
+                if (role == null)
+                    return BadRequest(new { message = "User role not found." });
+
+                var userResponse = new UserResponse
+                {
+                    UserId = user.UserId,
+                    Username = user.Username,
+                    Email = user.Email,
+                    Role = role.RoleName,
+                    RegistrationDate = user.RegistrationDate
+                };
+
+                return Ok(new { user = userResponse });
+            }
+
+            return BadRequest(new { message = response.Message });
+        }
+
+        // POST: /api/auth/login
+        [HttpPost("login")]
+        public IActionResult Login([FromBody] LoginRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = _userService.Authenticate(request);
+            if (response == null)
+                return Unauthorized(new { message = "Invalid credentials." });
+
+            return Ok(new
+            {
+                token = response.Token,
+                username = response.Username,
+                role = response.Role,
+                userId = response.UserId
+            });
+        }
+
+        // POST: /api/auth/logout
+        [HttpPost("logout")]
+        [Authorize] // Ensure that only authenticated users can access this endpoint
+        public IActionResult Logout()
+        {
+            // Extract the UserId from the JWT claims
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            // Fetch user details from the repository
+            var user = _userRepository.GetUserById(userId);
+            if (user == null)
+            {
+                return NotFound(new { message = "User not found." });
+            }
+
+            // Fetch the user's role name
+            var role = _roleRepository.GetRoleById(user.RoleId);
+            if (role == null)
+            {
+                return BadRequest(new { message = "User role not found." });
+            }
+
+            // Prepare the UserResponse object
+            var userResponse = new UserResponse
+            {
+                UserId = user.UserId,
+                Username = user.Username,
+                Email = user.Email,
+                Role = role.RoleName,
+                RegistrationDate = user.RegistrationDate
+            };
+
+            // Return the logout success message along with user information
+            return Ok(new
+            {
+                message = "Logout successful.",
+                user = userResponse
+            });
+        }
+    }
+}
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Services;
+using System.Security.Claims;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class BookingsController : ControllerBase
+    {
+        private readonly IBookingService _bookingService;
+
+        public BookingsController(IBookingService bookingService)
+        {
+            _bookingService = bookingService;
+        }
+
+        // GET: /api/bookings
+        [HttpGet]
+        [Authorize(Roles = "Administrator,Registered User")]
+        public ActionResult<IEnumerable<Booking>> GetAllBookings()
+        {
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            var role = User.FindFirstValue(ClaimTypes.Role);
+
+            if (role == "Administrator")
+            {
+                var allBookings = _bookingService.GetAllBookingsForAdmin();
+                return Ok(new { list = allBookings });
+            }
+            else
+            {
+                var userBookings = _bookingService.GetAllBookingsForUser(userId);
+                return Ok(new { list = userBookings });
+            }
+        }
+
+        // GET: /api/bookings/all
+        [HttpGet("all")]
+        [Authorize(Roles = "Administrator")]
+        public ActionResult<IEnumerable<Booking>> GetAllBookingsForAdmin()
+        {
+            var allBookings = _bookingService.GetAllBookingsForAdmin();
+            return Ok(new { list = allBookings });
+        }
+
+        // GET: /api/bookings/{id}
+        [HttpGet("{id}")]
+        [Authorize(Roles = "Administrator,Registered User")]
+        public ActionResult<Booking> GetBookingById(int id)
+        {
+            var booking = _bookingService.GetBookingById(id);
+            if (booking == null)
+                return NotFound(new { message = "Booking not found." });
+
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            var role = User.FindFirstValue(ClaimTypes.Role);
+
+            if (role != "Administrator" && booking.UserId != userId)
+                return Forbid();
+
+            return Ok(new { booking });
+        }
+
+        // POST: /api/bookings
+        [HttpPost]
+        [Authorize(Roles = "Registered User")]
+        public IActionResult AddBooking([FromBody] Booking booking)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            booking.UserId = userId;
+            booking.Status = "Pending"; // Setting Status here
+
+            _bookingService.AddBooking(booking);
+            return CreatedAtAction(nameof(GetBookingById), new { id = booking.BookingId }, new { booking });
+        }
+
+        // PUT: /api/bookings/{id}
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Administrator,Registered User")]
+        public IActionResult UpdateBooking(int id, [FromBody] Booking booking)
+        {
+            if (id != booking.BookingId)
+                return BadRequest(new { message = "ID mismatch." });
+
+            var existingBooking = _bookingService.GetBookingById(id);
+            if (existingBooking == null)
+                return NotFound(new { message = "Booking not found." });
+
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            var role = User.FindFirstValue(ClaimTypes.Role);
+
+            if (role != "Administrator" && existingBooking.UserId != userId)
+                return Forbid();
+
+            // Ensure the UserId remains unchanged
+            booking.UserId = existingBooking.UserId;
+
+            _bookingService.UpdateBooking(booking);
+            return NoContent();
+        }
+
+        // DELETE: /api/bookings/{id}
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Administrator,Registered User")]
+        public IActionResult DeleteBooking(int id)
+        {
+            var existingBooking = _bookingService.GetBookingById(id);
+            if (existingBooking == null)
+                return NotFound(new { message = "Booking not found." });
+
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            var role = User.FindFirstValue(ClaimTypes.Role);
+
+            if (role != "Administrator" && existingBooking.UserId != userId)
+                return Forbid();
+
+            _bookingService.DeleteBooking(id);
+            return NoContent();
+        }
+    }
+}
+
+// Controllers/DatabaseObjectsController.cs
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using RoomReservationSystem.Services;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Controllers
+{
+    [ApiController]
+    [Route("api/database/objects")]
+    [Authorize(Roles = "Administrator")]
+    public class DatabaseObjectsController : ControllerBase
+    {
+        private readonly IDatabaseObjectsService _databaseObjectsService;
+
+        public DatabaseObjectsController(IDatabaseObjectsService databaseObjectsService)
+        {
+            _databaseObjectsService = databaseObjectsService;
+        }
+
+        // GET: /api/database/objects
+        [HttpGet]
+        public ActionResult<IEnumerable<string>> GetAllDatabaseObjects()
+        {
+            var objects = _databaseObjectsService.GetAllDatabaseObjects();
+            return Ok(objects);
+        }
+
+        // GET: /api/database/objects/{name}
+        [HttpGet("{name}")]
+        public ActionResult<IEnumerable<string>> GetDatabaseObjectsByName(string name)
+        {
+            var objects = _databaseObjectsService.GetDatabaseObjectsByName(name);
+            return Ok(objects);
+        }
+    }
+}
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Services;
+using System;
+using System.IO;
+using System.Security.Claims;
+using System.Threading.Tasks;
+
+// Alias for the custom File model
+using FileModel = RoomReservationSystem.Models.File;
+
+namespace RoomReservationSystem.Controllers
+{
+    [ApiController]
+    [Route("api/files")]
+    [Authorize(Roles = "Administrator,Registered User")]
+    public class FilesController : ControllerBase
+    {
+        private readonly IFileService _fileService;
+
+        public FilesController(IFileService fileService)
+        {
+            _fileService = fileService;
+        }
+
+        // POST: /api/files/upload
+        [HttpPost("upload")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadFile([FromForm] IFormFile File)
+        {
+            Console.WriteLine("Content-Type of request: " + Request.ContentType);
+            Console.WriteLine("Total files received: " + Request.Form.Files.Count);
+
+            foreach (var file in Request.Form.Files)
+            {
+                Console.WriteLine("File name: " + file.FileName);
+            }
+
+            if (File == null || File.Length == 0)
+            {
+                Console.WriteLine("No file uploaded.");
+                return BadRequest(new { message = "No file uploaded." });
+            }
+
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            using var memoryStream = new MemoryStream();
+            await File.CopyToAsync(memoryStream);
+
+            var fileModel = new FileModel
+            {
+                UploadedBy = userId,
+                FileName = Path.GetFileName(File.FileName),
+                FileType = File.ContentType,
+                FileExtension = Path.GetExtension(File.FileName),
+                UploadDate = DateTime.UtcNow,
+                Operation = "Upload",
+                FileContent = memoryStream.ToArray()
+            };
+
+            _fileService.UploadFile(fileModel);
+            return Ok(new { file = fileModel });
+        }
+
+        // GET: /api/files/{id}
+        [HttpGet("{id}")]
+        public IActionResult GetFile(int id)
+        {
+            var file = _fileService.GetFileById(id);
+            if (file == null)
+                return NotFound(new { message = "File not found." });
+
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            var role = User.FindFirstValue(ClaimTypes.Role);
+
+            if (role != "Administrator" && file.UploadedBy != userId)
+                return Forbid();
+
+            // Return the file as a downloadable content
+            return File(file.FileContent, file.FileType, file.FileName);
+        }
+
+        // DELETE: /api/files/{id}
+        [HttpDelete("{id}")]
+        public IActionResult DeleteFile(int id)
+        {
+            var file = _fileService.GetFileById(id);
+            if (file == null)
+                return NotFound(new { message = "File not found." });
+
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            var role = User.FindFirstValue(ClaimTypes.Role);
+
+            if (role != "Administrator" && file.UploadedBy != userId)
+                return Forbid();
+
+            _fileService.DeleteFile(id);
+            return NoContent();
+        }
+    }
+}
+
+// Models/FileUploadRequest.cs
+using Microsoft.AspNetCore.Http;
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models
+{
+    public class FileUploadRequest
+    {
+        [Required]
+        public IFormFile File { get; set; }
+    }
+}
+
+// Models/MessageCreateRequest.cs
+using System.ComponentModel.DataAnnotations;
+
+namespace RoomReservationSystem.Models
+{
+    public class MessageCreateRequest
+    {
+        [Required]
+        public string ReceiverUsername { get; set; }
+
+        [Required]
+        [StringLength(255, MinimumLength = 1)]
+        public string Subject { get; set; }
+
+        [Required]
+        public string Body { get; set; }
+    }
+}
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Services;
+using RoomReservationSystem.Repositories;
+using System.Security.Claims;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize(Roles = "Administrator,Registered User")]
+    public class MessagesController : ControllerBase
+    {
+        private readonly IMessageService _messageService;
+        private readonly IUserRepository _userRepository;
+
+        public MessagesController(IMessageService messageService, IUserRepository userRepository)
+        {
+            _messageService = messageService;
+            _userRepository = userRepository;
+        }
+
+        // GET: /api/messages
+        [HttpGet]
+        public ActionResult<IEnumerable<Message>> GetMessages()
+        {
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            var role = User.FindFirstValue(ClaimTypes.Role);
+
+            if (role == "Administrator")
+            {
+                var allMessages = _messageService.GetAllMessages();
+                return Ok(new { list = allMessages });
+            }
+            else
+            {
+                var messages = _messageService.GetMessagesForUser(userId);
+                return Ok(new { list = messages });
+            }
+        }
+
+        // POST: /api/messages
+        [HttpPost]
+        public IActionResult SendMessage([FromBody] MessageCreateRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var senderIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(senderIdClaim, out int senderId))
+            {
+                return Unauthorized(new { message = "Invalid sender ID." });
+            }
+
+            var receiver = _userRepository.GetUserByUsername(request.ReceiverUsername);
+            if (receiver == null)
+                return BadRequest(new { message = "Receiver does not exist." });
+
+            var message = new Message
+            {
+                SenderId = senderId,
+                ReceiverId = receiver.UserId,
+                Subject = request.Subject,
+                Body = request.Body,
+                SentAt = DateTime.UtcNow
+            };
+
+            _messageService.SendMessage(message);
+            return Ok(new { message });
+        }
+    }
+}
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Repositories;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class RoomsController : ControllerBase
+    {
+        private readonly IRoomRepository _roomRepository;
+
+        public RoomsController(IRoomRepository roomRepository)
+        {
+            _roomRepository = roomRepository;
+        }
+
+        // GET: /api/rooms
+        [HttpGet]
+        [Authorize(Roles = "Administrator,Registered User,Unauthenticated User")]
+        public ActionResult<IEnumerable<Room>> GetAllRooms()
+        {
+            var rooms = _roomRepository.GetAllRooms();
+            return Ok(new { list = rooms });
+        }
+
+        // GET: /api/rooms/{id}
+        [HttpGet("{id}")]
+        [Authorize(Roles = "Administrator,Registered User,Unauthenticated User")]
+        public ActionResult<Room> GetRoomById(int id)
+        {
+            var room = _roomRepository.GetRoomById(id);
+            if (room == null)
+                return NotFound(new { message = "Room not found." });
+
+            return Ok(new { room });
+        }
+
+        // POST: /api/rooms
+        [HttpPost]
+        [Authorize(Roles = "Administrator")]
+        public IActionResult AddRoom([FromBody] Room room)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            _roomRepository.AddRoom(room);
+            return CreatedAtAction(nameof(GetRoomById), new { id = room.RoomId }, new { room });
+        }
+
+        // PUT: /api/rooms/{id}
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Administrator")]
+        public IActionResult UpdateRoom(int id, [FromBody] Room room)
+        {
+            if (id != room.RoomId)
+                return BadRequest(new { message = "ID mismatch." });
+
+            var existingRoom = _roomRepository.GetRoomById(id);
+            if (existingRoom == null)
+                return NotFound(new { message = "Room not found." });
+
+            _roomRepository.UpdateRoom(room);
+            return NoContent();
+        }
+
+        // DELETE: /api/rooms/{id}
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Administrator")]
+        public IActionResult DeleteRoom(int id)
+        {
+            var existingRoom = _roomRepository.GetRoomById(id);
+            if (existingRoom == null)
+                return NotFound(new { message = "Room not found." });
+
+            _roomRepository.DeleteRoom(id);
+            return NoContent();
+        }
+    }
+}
+
+// Controllers/UsersController.cs
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Repositories;
+using Oracle.ManagedDataAccess.Client;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace RoomReservationSystem.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize(Roles = "Administrator")]
+    public class UsersController : ControllerBase
+    {
+        private readonly IUserRepository _userRepository;
+        private readonly IRoleRepository _roleRepository;
+
+        public UsersController(IUserRepository userRepository, IRoleRepository roleRepository)
+        {
+            _userRepository = userRepository;
+            _roleRepository = roleRepository;
+        }
+
+        // GET: /api/users
+        [HttpGet]
+        public ActionResult<IEnumerable<UserResponse>> GetAllUsers()
+        {
+            var users = _userRepository.GetAllUsers();
+            var roles = _roleRepository.GetAllRoles();
+
+            var userResponses = from user in users
+                                join role in roles on user.RoleId equals role.RoleId
+                                select new UserResponse
+                                {
+                                    UserId = user.UserId,
+                                    Username = user.Username,
+                                    Email = user.Email,
+                                    Role = role.RoleName,
+                                    RegistrationDate = user.RegistrationDate
+                                };
+
+            return Ok(new { list = userResponses });
+        }
+
+        // GET: /api/users/{id}
+        [HttpGet("{id}")]
+        public ActionResult<UserResponse> GetUserById(int id)
+        {
+            var user = _userRepository.GetUserById(id);
+            if (user == null)
+                return NotFound(new { message = "User not found." });
+
+            var role = _roleRepository.GetRoleById(user.RoleId);
+            if (role == null)
+                return BadRequest(new { message = "User role not found." });
+
+            var userResponse = new UserResponse
+            {
+                UserId = user.UserId,
+                Username = user.Username,
+                Email = user.Email,
+                Role = role.RoleName,
+                RegistrationDate = user.RegistrationDate
+            };
+
+            return Ok(new { user = userResponse });
+        }
+
+        // POST: /api/users
+        [HttpPost]
+        public IActionResult AddUser([FromBody] User user)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            _userRepository.AddUser(user);
+
+            var role = _roleRepository.GetRoleById(user.RoleId);
+            if (role == null)
+                return BadRequest(new { message = "User role not found." });
+
+            var userResponse = new UserResponse
+            {
+                UserId = user.UserId,
+                Username = user.Username,
+                Email = user.Email,
+                Role = role.RoleName,
+                RegistrationDate = user.RegistrationDate
+            };
+
+            return CreatedAtAction(nameof(GetUserById), new { id = user.UserId }, new { user = userResponse });
+        }
+
+        // PUT: /api/users/{id}
+        [HttpPut("{id}")]
+        public IActionResult UpdateUser(int id, [FromBody] UserUpdateRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var existingUser = _userRepository.GetUserById(id);
+            if (existingUser == null)
+                return NotFound(new { message = "User not found." });
+
+            existingUser.Username = request.Username;
+            existingUser.Email = request.Email;
+
+            if (!string.IsNullOrEmpty(request.RoleName))
+            {
+                var role = _roleRepository.GetRoleByName(request.RoleName);
+                if (role == null)
+                    return BadRequest(new { message = "Invalid role name." });
+
+                existingUser.RoleId = role.RoleId;
+            }
+
+            _userRepository.UpdateUser(existingUser);
+
+            var updatedUser = _userRepository.GetUserById(id);
+            var updatedRole = _roleRepository.GetRoleById(updatedUser.RoleId);
+
+            var userResponse = new UserResponse
+            {
+                UserId = updatedUser.UserId,
+                Username = updatedUser.Username,
+                Email = updatedUser.Email,
+                Role = updatedRole.RoleName,
+                RegistrationDate = updatedUser.RegistrationDate
+            };
+
+            return Ok(new { user = userResponse });
+        }
+
+        // DELETE: /api/users/{id}
+        [HttpDelete("{id}")]
+        public IActionResult DeleteUser(int id)
+        {
+            var user = _userRepository.GetUserById(id);
+            if (user == null)
+                return NotFound(new { message = "User not found." });
+
+            try
+            {
+                _userRepository.DeleteUser(id);
+
+                var role = _roleRepository.GetRoleById(user.RoleId);
+                var userResponse = new UserResponse
+                {
+                    UserId = user.UserId,
+                    Username = user.Username,
+                    Email = user.Email,
+                    Role = role != null ? role.RoleName : "Unknown",
+                    RegistrationDate = user.RegistrationDate
+                };
+
+                return Ok(new { message = "User deleted successfully.", user = userResponse });
+            }
+            catch (OracleException ex) when (ex.Number == 2292)
+            {
+                // ORA-02292: integrity constraint violated - child record found
+                return BadRequest(new { message = "Cannot delete user because there are related logs." });
+            }
+            catch (Exception)
+            {
+                // Optionally log the exception here using a logging framework
+                return StatusCode(500, new { message = "An error occurred while deleting the user." });
+            }
+        }
+    }
+}
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Services;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Controllers.Admin
+{
+    [ApiController]
+    [Route("api/admin/[controller]")]
+    [Authorize(Roles = "Administrator")]
+    public class BuildingsController : ControllerBase
+    {
+        private readonly IBuildingService _buildingService;
+        private readonly ILogger<BuildingsController> _logger;
+
+        public BuildingsController(IBuildingService buildingService, ILogger<BuildingsController> logger)
+        {
+            _buildingService = buildingService;
+            _logger = logger;
+        }
+
+        // GET: /api/admin/buildings
+        [HttpGet]
+        public ActionResult<IEnumerable<Building>> GetAllBuildings()
+        {
+            _logger.LogInformation("Fetching all buildings.");
+            var buildings = _buildingService.GetAllBuildings();
+            return Ok(new { list = buildings });
+        }
+
+        // GET: /api/admin/buildings/{id}
+        [HttpGet("{id}")]
+        public ActionResult<Building> GetBuildingById(int id)
+        {
+            _logger.LogInformation($"Fetching building with ID: {id}");
+            var building = _buildingService.GetBuildingById(id);
+            if (building == null)
+            {
+                _logger.LogWarning($"Building with ID: {id} not found.");
+                return NotFound(new { message = "Building not found." });
+            }
+
+            return Ok(new { building });
+        }
+
+        // POST: /api/admin/buildings
+        [HttpPost]
+        public IActionResult AddBuilding([FromBody] Building building)
+        {
+            _logger.LogInformation("Adding a new building.");
+            if (!ModelState.IsValid)
+            {
+                _logger.LogWarning("Invalid model state for adding a building.");
+                return BadRequest(ModelState);
+            }
+
+            _buildingService.AddBuilding(building);
+            _logger.LogInformation($"Building added with ID: {building.BuildingId}");
+            return CreatedAtAction(nameof(GetBuildingById), new { id = building.BuildingId }, new { building });
+        }
+
+        // PUT: /api/admin/buildings/{id}
+        [HttpPut("{id}")]
+        public IActionResult UpdateBuilding(int id, [FromBody] Building building)
+        {
+            _logger.LogInformation($"Updating building with ID: {id}");
+            if (id != building.BuildingId)
+            {
+                _logger.LogWarning("ID mismatch in update request.");
+                return BadRequest(new { message = "ID mismatch." });
+            }
+
+            var existingBuilding = _buildingService.GetBuildingById(id);
+            if (existingBuilding == null)
+            {
+                _logger.LogWarning($"Building with ID: {id} not found for update.");
+                return NotFound(new { message = "Building not found." });
+            }
+
+            _buildingService.UpdateBuilding(building);
+            _logger.LogInformation($"Building with ID: {id} updated successfully.");
+            return NoContent();
+        }
+
+        // DELETE: /api/admin/buildings/{id}
+        [HttpDelete("{id}")]
+        public IActionResult DeleteBuilding(int id)
+        {
+            _logger.LogInformation($"Attempting to delete building with ID: {id}");
+            var existingBuilding = _buildingService.GetBuildingById(id);
+            if (existingBuilding == null)
+            {
+                _logger.LogWarning($"Building with ID: {id} not found for deletion.");
+                return NotFound(new { message = "Building not found." });
+            }
+
+            _buildingService.DeleteBuilding(id);
+            _logger.LogInformation($"Building with ID: {id} deleted successfully.");
+            return NoContent();
+        }
+    }
+}
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using RoomReservationSystem.Models;
+using RoomReservationSystem.Services;
+using System.Collections.Generic;
+
+namespace RoomReservationSystem.Controllers.Admin
+{
+    [ApiController]
+    [Route("api/admin/[controller]")]
+    [Authorize(Roles = "Administrator")]
+    public class BuildingsController : ControllerBase
+    {
+        private readonly IBuildingService _buildingService;
+        private readonly ILogger<BuildingsController> _logger;
+
+        public BuildingsController(IBuildingService buildingService, ILogger<BuildingsController> logger)
+        {
+            _buildingService = buildingService;
+            _logger = logger;
+        }
+
+        // GET: /api/admin/buildings
+        [HttpGet]
+        public ActionResult<IEnumerable<Building>> GetAllBuildings()
+        {
+            _logger.LogInformation("Fetching all buildings.");
+            var buildings = _buildingService.GetAllBuildings();
+            return Ok(new { list = buildings });
+        }
+
+        // GET: /api/admin/buildings/{id}
+        [HttpGet("{id}")]
+        public ActionResult<Building> GetBuildingById(int id)
+        {
+            _logger.LogInformation($"Fetching building with ID: {id}");
+            var building = _buildingService.GetBuildingById(id);
+            if (building == null)
+            {
+                _logger.LogWarning($"Building with ID: {id} not found.");
+                return NotFound(new { message = "Building not found." });
+            }
+
+            return Ok(new { building });
+        }
+
+        // POST: /api/admin/buildings
+        [HttpPost]
+        public IActionResult AddBuilding([FromBody] Building building)
+        {
+            _logger.LogInformation("Adding a new building.");
+            if (!ModelState.IsValid)
+            {
+                _logger.LogWarning("Invalid model state for adding a building.");
+                return BadRequest(ModelState);
+            }
+
+            _buildingService.AddBuilding(building);
+            _logger.LogInformation($"Building added with ID: {building.BuildingId}");
+            return CreatedAtAction(nameof(GetBuildingById), new { id = building.BuildingId }, new { building });
+        }
+
+        // PUT: /api/admin/buildings/{id}
+        [HttpPut("{id}")]
+        public IActionResult UpdateBuilding(int id, [FromBody] Building building)
+        {
+            _logger.LogInformation($"Updating building with ID: {id}");
+            if (id != building.BuildingId)
+            {
+                _logger.LogWarning("ID mismatch in update request.");
+                return BadRequest(new { message = "ID mismatch." });
+            }
+
+            var existingBuilding = _buildingService.GetBuildingById(id);
+            if (existingBuilding == null)
+            {
+                _logger.LogWarning($"Building with ID: {id} not found for update.");
+                return NotFound(new { message = "Building not found." });
+            }
+
+            _buildingService.UpdateBuilding(building);
+            _logger.LogInformation($"Building with ID: {id} updated successfully.");
+            return NoContent();
+        }
+
+        // DELETE: /api/admin/buildings/{id}
+        [HttpDelete("{id}")]
+        public IActionResult DeleteBuilding(int id)
+        {
+            _logger.LogInformation($"Attempting to delete building with ID: {id}");
+            var existingBuilding = _buildingService.GetBuildingById(id);
+            if (existingBuilding == null)
+            {
+                _logger.LogWarning($"Building with ID: {id} not found for deletion.");
+                return NotFound(new { message = "Building not found." });
+            }
+
+            _buildingService.DeleteBuilding(id);
+            _logger.LogInformation($"Building with ID: {id} deleted successfully.");
+            return NoContent();
+        }
+    }
+}
+
+// Data/DbConnectionFactory.cs
+using Microsoft.Extensions.Configuration;
+using Oracle.ManagedDataAccess.Client;
+
+namespace RoomReservationSystem.Data
+{
+    public class DbConnectionFactory : IDbConnectionFactory
+    {
+        private readonly IConfiguration _configuration;
+
+        public DbConnectionFactory(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
+        public OracleConnection CreateConnection()
+        {
+            var connectionString = _configuration.GetConnectionString("OracleDb");
+            return new OracleConnection(connectionString);
+        }
+    }
+}
+
+// Data/IDbConnectionFactory.cs
+using Oracle.ManagedDataAccess.Client;
+
+namespace RoomReservationSystem.Data
+{
+    public interface IDbConnectionFactory
+    {
+        OracleConnection CreateConnection();
+    }
+}
+
