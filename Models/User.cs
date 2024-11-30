@@ -1,6 +1,7 @@
 // Models/User.cs
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace RoomReservationSystem.Models
 {
@@ -8,15 +9,13 @@ namespace RoomReservationSystem.Models
     {
         public int UserId { get; set; }
 
-        [Required]
-        public string Username { get; set; }
+        public required string Username { get; set; }
 
-        [Required]
-        public string PasswordHash { get; set; }
+        [JsonIgnore]
+        public required string PasswordHash { get; set; }
 
-        [Required]
         [EmailAddress]
-        public string Email { get; set; }
+        public required string Email { get; set; }
 
         [Required]
         public int RoleId { get; set; }

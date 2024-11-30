@@ -5,6 +5,7 @@ using RoomReservationSystem.Models;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Threading;
 
 namespace RoomReservationSystem.Repositories
 {
@@ -19,27 +20,50 @@ namespace RoomReservationSystem.Repositories
 
         public User GetUserByUsername(string username)
         {
-            using var connection = _connectionFactory.CreateConnection();
-            connection.Open();
-            using var command = connection.CreateCommand();
-            command.CommandText = @"
-                SELECT user_id, username, password_hash, email, role_id, registration_date 
-                FROM users 
-                WHERE username = :username";
-            command.Parameters.Add(new OracleParameter("username", OracleDbType.Varchar2) { Value = username });
+            int maxRetries = 3;
+            int currentRetry = 0;
+            int delayMs = 1000;
 
-            using var reader = command.ExecuteReader();
-            if (reader.Read())
+            while (currentRetry < maxRetries)
             {
-                return new User
+                try
                 {
-                    UserId = Convert.ToInt32(reader["user_id"]),
-                    Username = reader["username"].ToString(),
-                    PasswordHash = reader["password_hash"].ToString(),
-                    Email = reader["email"].ToString(),
-                    RoleId = Convert.ToInt32(reader["role_id"]),
-                    RegistrationDate = Convert.ToDateTime(reader["registration_date"])
-                };
+                    using var connection = _connectionFactory.CreateConnection();
+                    connection.Open();
+                    using var command = connection.CreateCommand();
+                    command.CommandText = @"
+                        SELECT user_id, username, password_hash, email, role_id, registration_date 
+                        FROM users 
+                        WHERE username = :username";
+                    command.Parameters.Add(new OracleParameter("username", OracleDbType.Varchar2) { Value = username });
+
+                    using var reader = command.ExecuteReader();
+                    if (reader.Read())
+                    {
+                        return new User
+                        {
+                            UserId = Convert.ToInt32(reader["user_id"]),
+                            Username = reader["username"].ToString(),
+                            PasswordHash = reader["password_hash"].ToString(),
+                            Email = reader["email"].ToString(),
+                            RoleId = Convert.ToInt32(reader["role_id"]),
+                            RegistrationDate = Convert.ToDateTime(reader["registration_date"])
+                        };
+                    }
+                    return null;
+                }
+                catch (OracleException ex) when (ex.Number == 1033 || ex.Number == 1034 || ex.Number == 1035)
+                {
+                    currentRetry++;
+                    if (currentRetry < maxRetries)
+                    {
+                        Thread.Sleep(delayMs);
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
             }
             return null;
         }

@@ -43,5 +43,15 @@ namespace RoomReservationSystem.Services
         {
             _bookingRepository.DeleteBooking(bookingId);
         }
+
+        public IEnumerable<Invoice> GetUnpaidInvoices()
+        {
+            return _bookingRepository.GetUnpaidInvoices(); // Assuming this method exists in the repository
+        }
+
+        public IEnumerable<Invoice> GetUserInvoices(int userId)
+        {
+            return _bookingRepository.GetUserInvoices(userId); // Assuming this method exists in the repository
+        }
     }
 }

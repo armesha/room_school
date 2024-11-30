@@ -10,9 +10,7 @@ namespace RoomReservationSystem.Models
         [Required(ErrorMessage = "BuildingId is required.")]
         public int BuildingId { get; set; }
 
-        [Required(ErrorMessage = "RoomNumber is required.")]
-        [StringLength(20, ErrorMessage = "RoomNumber cannot exceed 20 characters.")]
-        public string RoomNumber { get; set; }
+        public required string RoomNumber { get; set; }
 
         [Required(ErrorMessage = "Capacity is required.")]
         [Range(1, int.MaxValue, ErrorMessage = "Capacity must be at least 1.")]
@@ -21,8 +19,7 @@ namespace RoomReservationSystem.Models
         public bool HasProjector { get; set; }
         public bool HasWhiteboard { get; set; }
 
-        [StringLength(500, ErrorMessage = "Description cannot exceed 500 characters.")]
-        public string Description { get; set; }
+        public required string Description { get; set; }
 
         // Made Image nullable by using byte[]? and removed [Required] attribute
         public byte[]? Image { get; set; }

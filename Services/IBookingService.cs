@@ -12,5 +12,7 @@ namespace RoomReservationSystem.Services
         void AddBooking(Booking booking);
         void UpdateBooking(Booking booking);
         void DeleteBooking(int bookingId);
+        IEnumerable<Invoice> GetUnpaidInvoices();
+        IEnumerable<Invoice> GetUserInvoices(int userId);
     }
 }

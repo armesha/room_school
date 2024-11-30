@@ -652,3 +652,207 @@ SELECT username, room_number, booking_date,
 FROM v_user_bookings
 WHERE username = 'test_user'
 ORDER BY booking_date, start_time;
+
+-- Add Paid column to invoices table
+ALTER TABLE invoices
+ADD is_paid NUMBER(1) DEFAULT 0 NOT NULL;
+
+-- Add a comment to explain the column
+COMMENT ON COLUMN invoices.is_paid IS 'Payment status: 0 = Unpaid, 1 = Paid';
+
+-- Update existing records to unpaid status (if needed)
+UPDATE invoices SET is_paid = 0 WHERE is_paid IS NULL;
+
+-- Create an index for faster querying by payment status
+CREATE INDEX idx_invoices_paid ON invoices(is_paid);
+
+-- Update the sp_create_invoice procedure
+CREATE OR REPLACE PROCEDURE sp_create_invoice (
+    p_booking_id IN NUMBER
+)
+AS
+    v_user_id NUMBER;
+    v_room_price NUMBER;
+    v_start_time DATE;
+    v_end_time DATE;
+    v_hours NUMBER;
+    v_total_cost NUMBER;
+    v_invoice_number VARCHAR2(50);
+BEGIN
+    -- Retrieve booking information
+    SELECT b.user_id, r.price, b.start_time, b.end_time
+    INTO v_user_id, v_room_price, v_start_time, v_end_time
+    FROM bookings b
+    JOIN rooms r ON b.room_id = r.room_id
+    WHERE b.booking_id = p_booking_id;
+
+    -- Calculate hours (rounded to nearest hour)
+    v_hours := CEIL((v_end_time - v_start_time) * 24);
+
+    -- Calculate total cost
+    v_total_cost := v_room_price * v_hours;
+
+    -- Generate invoice number (INV + sequential number)
+    v_invoice_number := 'INV' || TO_CHAR(seq_invoices.NEXTVAL, 'FM0000');
+
+    -- Create invoice record
+    INSERT INTO invoices (
+        invoice_id,
+        invoice_number,
+        booking_id,
+        user_id,
+        amount,
+        invoice_date,
+        is_paid
+    )
+    VALUES (
+        seq_invoices.NEXTVAL,
+        v_invoice_number,
+        p_booking_id,
+        v_user_id,
+        v_total_cost,
+        SYSDATE,
+        0  -- Default to unpaid
+    );
+
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Log error and re-raise
+        ROLLBACK;
+        RAISE;
+END sp_create_invoice;
+/
+
+-- Create a trigger to automatically generate invoice after booking
+CREATE OR REPLACE TRIGGER trg_after_insert_booking
+AFTER INSERT ON bookings
+FOR EACH ROW
+DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;
+BEGIN
+    -- Call the procedure to create an invoice
+    sp_create_invoice(:NEW.booking_id);
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Log error but don't stop the booking creation
+        NULL;
+END;
+/
+
+-- Create a view to see booking details with invoice information
+CREATE OR REPLACE VIEW v_booking_invoices AS
+SELECT 
+    b.booking_id,
+    b.user_id,
+    u.username,
+    r.room_number,
+    r.price as hourly_rate,
+    b.start_time,
+    b.end_time,
+    b.status as booking_status,
+    i.invoice_number,
+    i.amount as total_cost,
+    i.invoice_date,
+    CASE 
+        WHEN i.is_paid = 1 THEN 'Paid'
+        ELSE 'Unpaid'
+    END as payment_status
+FROM 
+    bookings b
+    JOIN users u ON b.user_id = u.user_id
+    JOIN rooms r ON b.room_id = r.room_id
+    LEFT JOIN invoices i ON b.booking_id = i.booking_id
+ORDER BY 
+    b.booking_date DESC;
+
+    -- First, let's update the sp_create_invoice procedure to include default location
+CREATE OR REPLACE PROCEDURE sp_create_invoice (
+    p_booking_id IN NUMBER
+)
+AS
+    v_user_id NUMBER;
+    v_room_price NUMBER;
+    v_start_time DATE;
+    v_end_time DATE;
+    v_hours NUMBER;
+    v_total_cost NUMBER;
+    v_invoice_number VARCHAR2(50);
+BEGIN
+    -- Retrieve booking information
+    SELECT b.user_id, r.price, b.start_time, b.end_time
+    INTO v_user_id, v_room_price, v_start_time, v_end_time
+    FROM bookings b
+    JOIN rooms r ON b.room_id = r.room_id
+    WHERE b.booking_id = p_booking_id;
+
+    -- Calculate hours (rounded to nearest hour)
+    v_hours := CEIL((v_end_time - v_start_time) * 24);
+
+    -- Calculate total cost
+    v_total_cost := v_room_price * v_hours;
+
+    -- Generate invoice number (INV + sequential number)
+    v_invoice_number := 'INV' || TO_CHAR(seq_invoices.NEXTVAL, 'FM0000');
+
+    -- Create invoice record with Czech Republic as default location
+    INSERT INTO invoices (
+        invoice_id,
+        invoice_number,
+        booking_id,
+        user_id,
+        amount,
+        payment_location,
+        invoice_date,
+        is_paid
+    )
+    VALUES (
+        seq_invoices.NEXTVAL,
+        v_invoice_number,
+        p_booking_id,
+        v_user_id,
+        v_total_cost,
+        'Czech Republic',
+        SYSDATE,
+        0  -- Default to unpaid
+    );
+
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+END sp_create_invoice;
+/
+
+-- Now let's create invoices for all existing bookings that don't have invoices yet
+DECLARE
+    CURSOR c_bookings IS
+        SELECT booking_id 
+        FROM bookings b
+        WHERE NOT EXISTS (
+            SELECT 1 
+            FROM invoices i 
+            WHERE i.booking_id = b.booking_id
+        );
+    v_booking_id NUMBER;
+BEGIN
+    OPEN c_bookings;
+    LOOP
+        FETCH c_bookings INTO v_booking_id;
+        EXIT WHEN c_bookings%NOTFOUND;
+        
+        BEGIN
+            sp_create_invoice(v_booking_id);
+        EXCEPTION
+            WHEN OTHERS THEN
+                -- Log error and continue with next booking
+                DBMS_OUTPUT.PUT_LINE('Error creating invoice for booking ' || v_booking_id || ': ' || SQLERRM);
+                CONTINUE;
+        END;
+    END LOOP;
+    CLOSE c_bookings;
+    COMMIT;
+END;
+/

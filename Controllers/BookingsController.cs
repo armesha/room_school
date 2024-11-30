@@ -77,7 +77,7 @@ namespace RoomReservationSystem.Controllers
 
         // POST: /api/bookings
         [HttpPost]
-        [Authorize(Roles = "Registered User")]
+        [Authorize(Roles = "Administrator,Registered User")]
         public IActionResult AddBooking([FromBody] Booking booking)
         {
             if (!ModelState.IsValid)
@@ -90,7 +90,10 @@ namespace RoomReservationSystem.Controllers
             }
 
             booking.UserId = userId;
-            booking.Status = "Pending"; // Setting Status here
+            if (string.IsNullOrEmpty(booking.Status))
+            {
+                booking.Status = "Pending";
+            }
 
             _bookingService.AddBooking(booking);
             return CreatedAtAction(nameof(GetBookingById), new { id = booking.BookingId }, new { booking });
@@ -148,6 +151,30 @@ namespace RoomReservationSystem.Controllers
 
             _bookingService.DeleteBooking(id);
             return NoContent();
+        }
+
+        // GET: /api/bookings/admin/invoices/unpaid
+        [HttpGet("admin/invoices/unpaid")]
+        [Authorize(Roles = "Administrator")]
+        public ActionResult<IEnumerable<Invoice>> GetUnpaidInvoices()
+        {
+            var unpaidInvoices = _bookingService.GetUnpaidInvoices(); 
+            return Ok(new { list = unpaidInvoices });
+        }
+
+        // GET: /api/bookings/user/invoices
+        [HttpGet("user/invoices")]
+        [Authorize(Roles = "Registered User")]
+        public ActionResult<IEnumerable<Invoice>> GetUserInvoices()
+        {
+            var userIdClaim = User.FindFirstValue("UserId");
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user ID." });
+            }
+
+            var userInvoices = _bookingService.GetUserInvoices(userId); 
+            return Ok(new { list = userInvoices });
         }
     }
 }
