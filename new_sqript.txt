@@ -1,3 +1,7 @@
+-- ================================================================
+-- Schema Creation Script for Room Reservation System
+-- ================================================================
+
 -- ============================
 -- 1. Create Sequences
 -- ============================
@@ -16,13 +20,6 @@ CREATE SEQUENCE seq_roles
     NOCACHE
     NOCYCLE;
 
--- Sequence for Buildings
-CREATE SEQUENCE seq_buildings
-    START WITH 1
-    INCREMENT BY 1
-    NOCACHE
-    NOCYCLE;
-
 -- Sequence for Rooms
 CREATE SEQUENCE seq_rooms
     START WITH 1
@@ -32,6 +29,13 @@ CREATE SEQUENCE seq_rooms
 
 -- Sequence for Bookings
 CREATE SEQUENCE seq_bookings
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Sequence for Buildings
+CREATE SEQUENCE seq_buildings
     START WITH 1
     INCREMENT BY 1
     NOCACHE
@@ -79,12 +83,6 @@ CREATE SEQUENCE seq_logs
     NOCACHE
     NOCYCLE;
 
--- Sequence for Invoices
-CREATE SEQUENCE seq_invoices
-    START WITH 1
-    INCREMENT BY 1
-    NOCACHE
-    NOCYCLE;
 
 -- ============================
 -- 2. Create Tables
@@ -116,9 +114,7 @@ CREATE TABLE users (
 CREATE TABLE buildings (
     building_id NUMBER PRIMARY KEY,
     building_name VARCHAR2(100) NOT NULL UNIQUE,
-    address VARCHAR2(255) NOT NULL,
-    description VARCHAR2(500),
-    image BLOB -- Changed from VARCHAR2(255) to BLOB for image storage
+    address VARCHAR2(255) NOT NULL
 );
 
 -- Table: Rooms
@@ -129,9 +125,6 @@ CREATE TABLE rooms (
     capacity NUMBER NOT NULL,
     has_projector CHAR(1) DEFAULT 'N',
     has_whiteboard CHAR(1) DEFAULT 'N',
-    description VARCHAR2(500),
-    image BLOB, -- Changed from VARCHAR2(255) to BLOB for image storage
-    price NUMBER(10,2) NOT NULL,
     CONSTRAINT fk_rooms_buildings FOREIGN KEY (building_id) REFERENCES buildings(building_id),
     CONSTRAINT uq_rooms_building_room UNIQUE (building_id, room_number)
 );
@@ -226,18 +219,6 @@ CREATE TABLE user_history (
     CONSTRAINT fk_history_users FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
--- Table: Invoices
-CREATE TABLE invoices (
-    invoice_id NUMBER PRIMARY KEY,
-    invoice_number VARCHAR2(50) NOT NULL UNIQUE,
-    booking_id NUMBER NOT NULL,
-    user_id NUMBER NOT NULL,
-    amount NUMBER(10,2) NOT NULL,
-    payment_location VARCHAR2(255) NOT NULL,
-    invoice_date DATE DEFAULT SYSDATE,
-    CONSTRAINT fk_invoices_bookings FOREIGN KEY (booking_id) REFERENCES bookings(booking_id),
-    CONSTRAINT fk_invoices_users FOREIGN KEY (user_id) REFERENCES users(user_id)
-);
 
 -- ============================
 -- 3. Create Views
@@ -268,63 +249,29 @@ FROM room_equipment re
 JOIN rooms r ON re.room_id = r.room_id
 JOIN equipment e ON re.equipment_id = e.equipment_id;
 
--- Hierarchical View for Building-Room Structure
-CREATE OR REPLACE VIEW v_building_room_hierarchy AS
-WITH RECURSIVE building_rooms AS (
-    SELECT b.building_id,
-           b.building_name,
-           CAST(NULL AS NUMBER) as room_id,
-           CAST(NULL AS VARCHAR2(20)) as room_number,
-           CAST(NULL AS NUMBER) as capacity,
-           CAST(NULL AS NUMBER) as price,
-           1 as level,
-           b.building_name as path
-    FROM buildings b
-    UNION ALL
-    SELECT b.building_id,
-           b.building_name,
-           r.room_id,
-           r.room_number,
-           r.capacity,
-           r.price,
-           2 as level,
-           b.building_name || ' -> ' || r.room_number as path
-    FROM buildings b
-    JOIN rooms r ON b.building_id = r.building_id
-)
-SELECT building_id,
-       building_name,
-       room_id,
-       room_number,
-       capacity,
-       price,
-       level,
-       path
-FROM building_rooms
-ORDER BY building_id, level, room_number;
 
--- ============================
+-- ================================================================
 -- 4. Create Functions
--- ============================
+-- ================================================================
 
 -- Function 1: Calculate Discounted Price
-CREATE OR REPLACE FUNCTION fn_calculate_discount(p_original_price NUMBER, p_discount_code VARCHAR2)
+CREATE OR REPLACE FUNCTION fn_calculate_discount(original_price NUMBER, discount_code VARCHAR2)
 RETURN NUMBER
 IS
-    v_discount_percentage NUMBER;
+    discount_percentage NUMBER;
 BEGIN
-    SELECT percentage INTO v_discount_percentage
+    SELECT percentage INTO discount_percentage
     FROM discounts
-    WHERE discount_code = p_discount_code
+    WHERE discount_code = discount_code
       AND SYSDATE BETWEEN valid_from AND valid_to;
 
-    RETURN p_original_price - (p_original_price * v_discount_percentage / 100);
+    RETURN original_price - (original_price * discount_percentage / 100);
 EXCEPTION
     WHEN NO_DATA_FOUND THEN
-        RETURN p_original_price; -- No discount applied
+        RETURN original_price; -- No discount applied
 END fn_calculate_discount;
 /
-    
+
 -- Function 2: Get User Role
 CREATE OR REPLACE FUNCTION fn_get_user_role(p_user_id NUMBER)
 RETURN VARCHAR2
@@ -342,7 +289,7 @@ EXCEPTION
         RETURN 'Unknown';
 END fn_get_user_role;
 /
-    
+
 -- Function 3: Calculate Room Utilization
 CREATE OR REPLACE FUNCTION fn_room_utilization(p_room_id NUMBER, p_start_date DATE, p_end_date DATE)
 RETURN NUMBER
@@ -358,10 +305,10 @@ BEGIN
           AND status = 'Confirmed'
     ) LOOP
         total_booked_hours := total_booked_hours + 
-            ((booking.end_time - booking.start_time) * 24);
+            (TO_NUMBER(TO_CHAR(booking.end_time, 'HH24')) - TO_NUMBER(TO_CHAR(booking.start_time, 'HH24')));
     END LOOP;
 
-    -- Assuming room is available from 8 AM to 8 PM each day (12 hours)
+    -- Assuming room is available from 8 AM to 8 PM each day
     total_available_hours := (TRUNC(p_end_date) - TRUNC(p_start_date) + 1) * 12;
 
     IF total_available_hours = 0 THEN
@@ -371,6 +318,7 @@ BEGIN
     END IF;
 END fn_room_utilization;
 /
+
 
 -- ============================
 -- 5. Create Stored Procedures
@@ -382,21 +330,12 @@ CREATE OR REPLACE PROCEDURE sp_add_room (
     p_room_number IN VARCHAR2,
     p_capacity IN NUMBER,
     p_has_projector IN CHAR,
-    p_has_whiteboard IN CHAR,
-    p_description IN VARCHAR2,
-    p_image IN BLOB, -- Updated to accept BLOB type
-    p_price IN NUMBER
+    p_has_whiteboard IN CHAR
 )
 AS
 BEGIN
-    INSERT INTO rooms (
-        room_id, building_id, room_number, capacity, has_projector, 
-        has_whiteboard, description, image, price
-    )
-    VALUES (
-        seq_rooms.NEXTVAL, p_building_id, p_room_number, p_capacity, 
-        p_has_projector, p_has_whiteboard, p_description, p_image, p_price
-    );
+    INSERT INTO rooms (room_id, building_id, room_number, capacity, has_projector, has_whiteboard)
+    VALUES (seq_rooms.NEXTVAL, p_building_id, p_room_number, p_capacity, p_has_projector, p_has_whiteboard);
     COMMIT;
 END sp_add_room;
 /
@@ -439,46 +378,6 @@ BEGIN
 END sp_delete_user;
 /
 
--- Procedure 5: Create Invoice (Refined)
-CREATE OR REPLACE PROCEDURE sp_create_invoice (
-    p_booking_id IN NUMBER,
-    p_payment_location IN VARCHAR2
-)
-AS
-    v_user_id NUMBER;
-    v_room_price NUMBER;
-    v_start_time DATE;
-    v_end_time DATE;
-    v_hours NUMBER;
-    v_amount NUMBER;
-    v_invoice_number VARCHAR2(50);
-BEGIN
-    -- Retrieve user_id, room price, start_time, and end_time from booking
-    SELECT b.user_id, r.price, b.start_time, b.end_time
-    INTO v_user_id, v_room_price, v_start_time, v_end_time
-    FROM bookings b
-    JOIN rooms r ON b.room_id = r.room_id
-    WHERE b.booking_id = p_booking_id;
-
-    -- Calculate the total hours booked
-    v_hours := (v_end_time - v_start_time) * 24;
-
-    -- Calculate the total amount
-    v_amount := v_room_price * v_hours;
-
-    -- Generate invoice number
-    v_invoice_number := 'INV' || TO_CHAR(seq_invoices.NEXTVAL, 'FM0000');
-
-    INSERT INTO invoices (
-        invoice_id, invoice_number, booking_id, user_id, amount, payment_location
-    )
-    VALUES (
-        seq_invoices.NEXTVAL, v_invoice_number, p_booking_id, v_user_id, v_amount, p_payment_location
-    );
-
-    COMMIT;
-END sp_create_invoice;
-/
 
 -- ============================
 -- 6. Create Triggers
@@ -494,176 +393,34 @@ BEGIN
     END IF;
 END;
 /
-    
--- Trigger 2: After Insert on Bookings to Create Invoice
-CREATE OR REPLACE TRIGGER trg_after_insert_booking
-AFTER INSERT ON bookings
-FOR EACH ROW
-BEGIN
-    -- Call the procedure to create an invoice
-    sp_create_invoice(:NEW.booking_id, 'Online Payment');
-END;
-/
-    
--- Trigger 3: After Update on Users to Log Changes
+
+-- Trigger 2: After Update on Users to Log Changes
 CREATE OR REPLACE TRIGGER trg_after_update_users
 AFTER UPDATE ON users
 FOR EACH ROW
 BEGIN
-    INSERT INTO logs (
-        log_id, user_id, action, log_date
-    )
-    VALUES (
-        seq_logs.NEXTVAL, :NEW.user_id, 'User updated', SYSDATE
-    );
+    INSERT INTO logs (log_id, user_id, action, log_date)
+    VALUES (seq_logs.NEXTVAL, :NEW.user_id, 'User updated', SYSDATE);
 END;
 /
-    
--- Trigger 4: After Update on Buildings Image to Log Changes
-CREATE OR REPLACE TRIGGER trg_after_update_buildings_image
-AFTER UPDATE ON buildings
-FOR EACH ROW
-BEGIN
-    IF DBMS_LOB.COMPARE(:OLD.image, :NEW.image) != 0 THEN
-        INSERT INTO logs (
-            log_id, user_id, action, log_date
-        )
-        VALUES (
-            seq_logs.NEXTVAL, :NEW.building_id, 'Building image updated', SYSDATE
-        );
-    END IF;
-END;
-/
-    
--- Trigger 5: After Update on Rooms Image to Log Changes
-CREATE OR REPLACE TRIGGER trg_after_update_rooms_image
-AFTER UPDATE ON rooms
-FOR EACH ROW
-BEGIN
-    IF DBMS_LOB.COMPARE(:OLD.image, :NEW.image) != 0 THEN
-        INSERT INTO logs (
-            log_id, user_id, action, log_date
-        )
-        VALUES (
-            seq_logs.NEXTVAL, :NEW.room_id, 'Room image updated', SYSDATE
-        );
-    END IF;
-END;
-/
-    
--- User Validation Trigger
-CREATE OR REPLACE TRIGGER trg_validate_user
-BEFORE INSERT OR UPDATE ON users
-FOR EACH ROW
-DECLARE
-    v_email_pattern VARCHAR2(255) := '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$';
-BEGIN
-    -- Email validation
-    IF NOT REGEXP_LIKE(:NEW.email, v_email_pattern) THEN
-        raise_application_error(-20001, 'Invalid email format');
-    END IF;
-    
-    -- Username validation (at least 3 characters, alphanumeric)
-    IF NOT REGEXP_LIKE(:NEW.username, '^[A-Za-z0-9]{3,}$') THEN
-        raise_application_error(-20002, 'Username must be at least 3 characters long and contain only letters and numbers');
-    END IF;
-    
-    -- Password validation (at least 8 characters, must contain number and special character)
-    IF NOT REGEXP_LIKE(:NEW.password_hash, '^.*(?=.{8,})(?=.*\d)(?=.*[!@#$%^&*]).*$') THEN
-        raise_application_error(-20003, 'Password must be at least 8 characters long and contain at least one number and one special character');
-    END IF;
-END;
-/
-    
--- Room Validation Trigger
-CREATE OR REPLACE TRIGGER trg_validate_room
-BEFORE INSERT OR UPDATE ON rooms
-FOR EACH ROW
-BEGIN
-    -- Capacity validation
-    IF :NEW.capacity <= 0 THEN
-        raise_application_error(-20004, 'Room capacity must be positive');
-    END IF;
-    
-    -- Price validation
-    IF :NEW.price <= 0 THEN
-        raise_application_error(-20005, 'Room price must be positive');
-    END IF;
-    
-    -- Room number format validation (alphanumeric)
-    IF NOT REGEXP_LIKE(:NEW.room_number, '^[A-Za-z0-9-]{1,20}$') THEN
-        raise_application_error(-20006, 'Invalid room number format');
-    END IF;
-END;
-/
-    
--- Booking Validation Trigger
-CREATE OR REPLACE TRIGGER trg_validate_booking
-BEFORE INSERT OR UPDATE ON bookings
-FOR EACH ROW
-DECLARE
-    v_existing_bookings NUMBER;
-    v_max_duration_hours NUMBER := 8; -- Maximum booking duration in hours
-BEGIN
-    -- Start time must be before end time
-    IF :NEW.start_time >= :NEW.end_time THEN
-        raise_application_error(-20007, 'Start time must be before end time');
-    END IF;
-    
-    -- Booking must be in the future
-    IF :NEW.booking_date < TRUNC(SYSDATE) THEN
-        raise_application_error(-20008, 'Cannot book for past dates');
-    END IF;
-    
-    -- Check booking duration
-    IF (:NEW.end_time - :NEW.start_time) * 24 > v_max_duration_hours THEN
-        raise_application_error(-20009, 'Booking duration cannot exceed ' || v_max_duration_hours || ' hours');
-    END IF;
-    
-    -- Check for overlapping bookings
-    SELECT COUNT(*)
-    INTO v_existing_bookings
-    FROM bookings
-    WHERE room_id = :NEW.room_id
-    AND booking_date = :NEW.booking_date
-    AND status = 'Confirmed'
-    AND (
-        (:NEW.start_time BETWEEN start_time AND end_time)
-        OR (:NEW.end_time BETWEEN start_time AND end_time)
-        OR (start_time BETWEEN :NEW.start_time AND :NEW.end_time)
-    )
-    AND booking_id != NVL(:NEW.booking_id, 0);
-    
-    IF v_existing_bookings > 0 THEN
-        raise_application_error(-20010, 'Room is already booked for this time period');
-    END IF;
-END;
-/
-    
--- ============================
+
+
+-- ================================================================
 -- 7. Create Additional Indexes (Optional)
--- ============================
+-- ================================================================
 
 -- Example: Index on Bookings booking_date
 CREATE INDEX idx_bookings_date ON bookings(booking_date);
 
--- ============================
+
+-- ================================================================
 -- 8. Populate Reference Tables with Sample Data
--- ============================
+-- ================================================================
 
 -- Insert sample data into Buildings
-INSERT INTO buildings (building_id, building_name, address, description, image) 
-VALUES (seq_buildings.NEXTVAL, 'Main Building', '123 Main St', 'The central hub for all activities.', EMPTY_BLOB());
-INSERT INTO buildings (building_id, building_name, address, description, image) 
-VALUES (seq_buildings.NEXTVAL, 'Science Hall', '456 Science Rd', 'Equipped with advanced laboratories.', EMPTY_BLOB());
-INSERT INTO buildings (building_id, building_name, address, description, image) 
-VALUES (seq_buildings.NEXTVAL, 'Library', '789 Library Ln', 'Filled with extensive resources.', EMPTY_BLOB());
-
--- Insert sample data into Rooms
-INSERT INTO rooms (room_id, building_id, room_number, capacity, has_projector, has_whiteboard, description, image, price) 
-VALUES (seq_rooms.NEXTVAL, 1, '101', 50, 'Y', 'Y', 'Large conference room with seating for 50.', EMPTY_BLOB(), 200.00);
-INSERT INTO rooms (room_id, building_id, room_number, capacity, has_projector, has_whiteboard, description, image, price) 
-VALUES (seq_rooms.NEXTVAL, 2, '202', 30, 'N', 'Y', 'Mid-sized meeting room without projector.', EMPTY_BLOB(), 150.00);
+INSERT INTO buildings (building_id, building_name, address) VALUES (seq_buildings.NEXTVAL, 'Main Building', '123 Main St');
+INSERT INTO buildings (building_id, building_name, address) VALUES (seq_buildings.NEXTVAL, 'Science Hall', '456 Science Rd');
+INSERT INTO buildings (building_id, building_name, address) VALUES (seq_buildings.NEXTVAL, 'Library', '789 Library Ln');
 
 -- Insert sample data into Equipment
 INSERT INTO equipment (equipment_id, equipment_name) VALUES (seq_equipment.NEXTVAL, 'Projector');
@@ -678,12 +435,16 @@ VALUES (seq_discounts.NEXTVAL, 'WELCOME10', '10% off for new users', 10, TO_DATE
 INSERT INTO discounts (discount_id, discount_code, description, percentage, valid_from, valid_to)
 VALUES (seq_discounts.NEXTVAL, 'SPRING20', '20% off for spring bookings', 20, TO_DATE('2024-03-01', 'YYYY-MM-DD'), TO_DATE('2024-05-31', 'YYYY-MM-DD'));
 
+-- Insert sample data into Roles (if not already inserted)
+-- (Already inserted above)
+
 -- Commit all inserts
 COMMIT;
 
--- ============================
+
+-- ================================================================
 -- 9. Grant Necessary Privileges (Optional)
--- ============================
+-- ================================================================
 
 -- Example: Grant SELECT, INSERT, UPDATE, DELETE on tables to a specific role or user
 -- Replace 'app_user' with your application user/schema
@@ -701,7 +462,7 @@ COMMIT;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON files TO app_user;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON logs TO app_user;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON user_history TO app_user;
--- GRANT SELECT, INSERT, UPDATE, DELETE ON invoices TO app_user;
+
 
 -- ================================================================
 -- 10. End of Script

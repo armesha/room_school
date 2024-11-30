@@ -1,0 +1,170 @@
+-- ============================
+-- 1. Create Sequences
+-- ============================
+
+-- [Previous sequences remain unchanged...]
+
+-- ============================
+-- 2. Create Tables
+-- ============================
+
+-- [Previous table definitions remain unchanged...]
+
+-- ============================
+-- 3. Create Views
+-- ============================
+
+-- [Previous views remain unchanged...]
+
+-- Add new hierarchical view for buildings and rooms
+CREATE OR REPLACE VIEW v_building_hierarchy AS
+SELECT 
+    b.building_id,
+    b.building_name,
+    r.room_id,
+    r.room_number,
+    r.capacity,
+    r.price
+FROM buildings b
+LEFT JOIN rooms r ON b.building_id = r.building_id
+START WITH b.building_id = 1
+CONNECT BY PRIOR b.building_id = r.building_id;
+
+-- ============================
+-- 4. Create Functions
+-- ============================
+
+-- [Previous functions remain unchanged...]
+
+-- ============================
+-- 5. Create Stored Procedures
+-- ============================
+
+-- [Previous procedures remain unchanged...]
+
+-- ============================
+-- 6. Create Triggers
+-- ============================
+
+-- User Data Validation Trigger
+CREATE OR REPLACE TRIGGER trg_user_validation 
+BEFORE INSERT OR UPDATE ON users 
+FOR EACH ROW 
+BEGIN
+    -- Email validation using regex pattern
+    IF NOT REGEXP_LIKE(:NEW.email, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$') THEN
+        raise_application_error(-20001, 'Invalid email format');
+    END IF;
+    
+    -- Username validation: only letters, numbers, and underscores allowed
+    IF NOT REGEXP_LIKE(:NEW.username, '^[A-Za-z0-9_]{3,50}$') THEN
+        raise_application_error(-20002, 'Invalid username format');
+    END IF;
+    
+    -- Convert username to lowercase for standardization
+    :NEW.username := LOWER(:NEW.username);
+END;
+/
+
+-- User Actions Audit Trigger
+CREATE OR REPLACE TRIGGER trg_audit_log
+AFTER INSERT OR UPDATE OR DELETE ON users
+FOR EACH ROW
+BEGIN
+    IF INSERTING THEN
+        INSERT INTO logs (log_id, user_id, action, log_date)
+        VALUES (seq_logs.NEXTVAL, :NEW.user_id, 'User created', SYSDATE);
+    ELSIF UPDATING THEN
+        INSERT INTO logs (log_id, user_id, action, log_date)
+        VALUES (seq_logs.NEXTVAL, :NEW.user_id, 'User updated', SYSDATE);
+    ELSIF DELETING THEN
+        INSERT INTO logs (log_id, user_id, action, log_date)
+        VALUES (seq_logs.NEXTVAL, :OLD.user_id, 'User deleted', SYSDATE);
+    END IF;
+END;
+/
+
+-- Booking Validation Trigger
+CREATE OR REPLACE TRIGGER trg_booking_validation
+BEFORE INSERT OR UPDATE ON bookings
+FOR EACH ROW
+DECLARE
+    v_room_capacity NUMBER;
+    v_existing_bookings NUMBER;
+BEGIN
+    -- Get room capacity for validation
+    SELECT capacity INTO v_room_capacity
+    FROM rooms
+    WHERE room_id = :NEW.room_id;
+    
+    -- Check for overlapping bookings
+    SELECT COUNT(*)
+    INTO v_existing_bookings
+    FROM bookings
+    WHERE room_id = :NEW.room_id
+    AND booking_date = :NEW.booking_date
+    AND ((start_time BETWEEN :NEW.start_time AND :NEW.end_time)
+    OR (end_time BETWEEN :NEW.start_time AND :NEW.end_time));
+    
+    IF v_existing_bookings > 0 THEN
+        raise_application_error(-20003, 'Room already booked for this time period');
+    END IF;
+    
+    -- Enforce maximum booking duration of 8 hours
+    IF (:NEW.end_time - :NEW.start_time) * 24 > 8 THEN
+        raise_application_error(-20004, 'Booking duration cannot exceed 8 hours');
+    END IF;
+END;
+/
+
+-- Room Validation Trigger
+CREATE OR REPLACE TRIGGER trg_room_validation
+BEFORE INSERT OR UPDATE ON rooms
+FOR EACH ROW
+BEGIN
+    -- Capacity validation
+    IF :NEW.capacity <= 0 THEN
+        raise_application_error(-20004, 'Room capacity must be positive');
+    END IF;
+    
+    -- Price validation
+    IF :NEW.price <= 0 THEN
+        raise_application_error(-20005, 'Room price must be positive');
+    END IF;
+    
+    -- Room number format validation (alphanumeric)
+    IF NOT REGEXP_LIKE(:NEW.room_number, '^[A-Za-z0-9-]{1,20}$') THEN
+        raise_application_error(-20006, 'Invalid room number format');
+    END IF;
+END;
+/
+
+-- File Upload Logging Trigger
+CREATE OR REPLACE TRIGGER trg_file_upload_log
+AFTER INSERT OR UPDATE ON files
+FOR EACH ROW
+BEGIN
+    INSERT INTO logs (log_id, user_id, action, log_date)
+    VALUES (
+        seq_logs.NEXTVAL,
+        :NEW.uploaded_by,
+        CASE
+            WHEN INSERTING THEN 'File uploaded: ' || :NEW.file_name
+            WHEN UPDATING THEN 'File updated: ' || :NEW.file_name
+        END,
+        SYSDATE
+    );
+END;
+/
+
+-- ============================
+-- 7. Sample Data Population
+-- ============================
+
+-- [Previous sample data insertions remain unchanged...]
+
+-- ============================
+-- 8. Grant Privileges
+-- ============================
+
+-- [Previous grants remain unchanged...]

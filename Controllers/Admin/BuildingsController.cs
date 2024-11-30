@@ -23,10 +23,10 @@ namespace RoomReservationSystem.Controllers.Admin
 
         // GET: /api/admin/buildings
         [HttpGet]
-        public ActionResult<IEnumerable<Building>> GetAllBuildings()
+        public ActionResult<IEnumerable<Building>> GetAllBuildings([FromQuery] int? limit = null, [FromQuery] int? offset = null)
         {
-            _logger.LogInformation("Fetching all buildings.");
-            var buildings = _buildingService.GetAllBuildings();
+            _logger.LogInformation("Fetching all buildings with limit: {limit}, offset: {offset}", limit, offset);
+            var buildings = _buildingService.GetAllBuildings(limit, offset);
             return Ok(new { list = buildings });
         }
 

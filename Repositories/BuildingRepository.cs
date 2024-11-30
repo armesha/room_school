@@ -16,16 +16,34 @@ namespace RoomReservationSystem.Repositories
             _connectionFactory = connectionFactory;
         }
 
-        public IEnumerable<Building> GetAllBuildings()
+        public IEnumerable<Building> GetAllBuildings(int? limit = null, int? offset = null)
         {
             var buildings = new List<Building>();
             using (var connection = _connectionFactory.CreateConnection())
             {
                 connection.Open();
-                string query = "SELECT building_id, building_name, address, description, image FROM buildings";
-
-                using (var command = new OracleCommand(query, connection))
+                var sql = "SELECT building_id, building_name, address, description, image FROM buildings";
+                
+                if (offset.HasValue)
                 {
+                    sql += " OFFSET :offset ROWS";
+                }
+                if (limit.HasValue)
+                {
+                    sql += " FETCH NEXT :limit ROWS ONLY";
+                }
+
+                using (var command = new OracleCommand(sql, connection))
+                {
+                    if (offset.HasValue)
+                    {
+                        command.Parameters.Add(new OracleParameter("offset", OracleDbType.Int32) { Value = offset.Value });
+                    }
+                    if (limit.HasValue)
+                    {
+                        command.Parameters.Add(new OracleParameter("limit", OracleDbType.Int32) { Value = limit.Value });
+                    }
+
                     using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())

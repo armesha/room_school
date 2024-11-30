@@ -14,9 +14,9 @@ namespace RoomReservationSystem.Services
             _buildingRepository = buildingRepository;
         }
 
-        public IEnumerable<Building> GetAllBuildings()
+        public IEnumerable<Building> GetAllBuildings(int? limit = null, int? offset = null)
         {
-            return _buildingRepository.GetAllBuildings();
+            return _buildingRepository.GetAllBuildings(limit, offset);
         }
 
         public Building GetBuildingById(int buildingId)
