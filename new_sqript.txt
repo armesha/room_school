@@ -517,3 +517,138 @@ BEGIN
     update_building_photos();
 END;
 /
+
+
+-- 1. Сначала изменим триггер, чтобы использовать автономную транзакцию
+CREATE OR REPLACE TRIGGER trg_after_insert_booking
+AFTER INSERT ON bookings
+FOR EACH ROW
+DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;
+BEGIN
+    sp_create_invoice(:NEW.booking_id);
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        NULL; -- Игнорируем ошибки в триггере
+END;
+/
+
+-- 2. Теперь добавим данные
+DECLARE
+    v_user_id NUMBER;
+    v_username VARCHAR2(50) := 'test_user';
+    v_count NUMBER;
+BEGIN
+    -- Проверяем, существует ли пользователь
+    SELECT COUNT(*) INTO v_count FROM users WHERE username = v_username;
+    
+    IF v_count = 0 THEN
+        -- Добавляем нового пользователя
+        INSERT INTO users (user_id, username, password_hash, email, role_id)
+        VALUES (seq_users.NEXTVAL, v_username, 'hashed_password', 'test@example.com', 2)
+        RETURNING user_id INTO v_user_id;
+    ELSE
+        -- Получаем существующий ID пользователя
+        SELECT user_id INTO v_user_id FROM users WHERE username = v_username;
+    END IF;
+    
+    -- Добавляем 20 резерваций
+    FOR i IN 1..20 LOOP
+        BEGIN
+            INSERT INTO bookings (
+                booking_id,
+                user_id,
+                room_id,
+                booking_date,
+                start_time,
+                end_time,
+                status
+            )
+            VALUES (
+                seq_bookings.NEXTVAL,
+                v_user_id,
+                MOD(i, 5) + 1,
+                TRUNC(SYSDATE) + i,
+                TRUNC(SYSDATE) + i + NUMTODSINTERVAL(9, 'HOUR'),
+                TRUNC(SYSDATE) + i + NUMTODSINTERVAL(11, 'HOUR'),
+                CASE MOD(i, 3) 
+                    WHEN 0 THEN 'Confirmed'
+                    WHEN 1 THEN 'Pending'
+                    ELSE 'Completed'
+                END
+            );
+            
+            COMMIT; -- Коммит после каждой вставки
+        EXCEPTION
+            WHEN OTHERS THEN
+                -- Логируем ошибку и продолжаем
+                DBMS_OUTPUT.PUT_LINE('Error inserting booking ' || i || ': ' || SQLERRM);
+                ROLLBACK;
+                CONTINUE;
+        END;
+    END LOOP;
+END;
+
+-- 1. Удалим проблемный триггер
+DROP TRIGGER trg_after_insert_booking;
+
+-- 2. Добавим данные
+DECLARE
+    v_user_id NUMBER;
+    v_username VARCHAR2(50) := 'test_user';
+    v_count NUMBER;
+BEGIN
+    -- Проверяем, существует ли пользователь
+    SELECT COUNT(*) INTO v_count FROM users WHERE username = v_username;
+    
+    IF v_count = 0 THEN
+        -- Добавляем нового пользователя
+        INSERT INTO users (user_id, username, password_hash, email, role_id)
+        VALUES (seq_users.NEXTVAL, v_username, 'hashed_password', 'test@example.com', 2)
+        RETURNING user_id INTO v_user_id;
+    ELSE
+        -- Получаем существующий ID пользователя
+        SELECT user_id INTO v_user_id FROM users WHERE username = v_username;
+    END IF;
+    
+    -- Добавляем 20 резерваций
+    FOR i IN 1..20 LOOP
+        BEGIN
+            INSERT INTO bookings (
+                booking_id,
+                user_id,
+                room_id,
+                booking_date,
+                start_time,
+                end_time,
+                status
+            )
+            VALUES (
+                seq_bookings.NEXTVAL,
+                v_user_id,
+                MOD(i, 5) + 1,
+                TRUNC(SYSDATE) + i,
+                TRUNC(SYSDATE) + i + NUMTODSINTERVAL(9, 'HOUR'),
+                TRUNC(SYSDATE) + i + NUMTODSINTERVAL(11, 'HOUR'),
+                CASE MOD(i, 3) 
+                    WHEN 0 THEN 'Confirmed'
+                    WHEN 1 THEN 'Pending'
+                    ELSE 'Completed'
+                END
+            );
+        END;
+    END LOOP;
+    
+    COMMIT;
+END;
+/
+
+-- 3. Проверяем результат
+SELECT username, room_number, booking_date, 
+       TO_CHAR(start_time, 'YYYY-MM-DD HH24:MI') as start_time,
+       TO_CHAR(end_time, 'YYYY-MM-DD HH24:MI') as end_time,
+       status
+FROM v_user_bookings
+WHERE username = 'test_user'
+ORDER BY booking_date, start_time;

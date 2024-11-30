@@ -5,6 +5,7 @@ using RoomReservationSystem.Models;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 
 namespace RoomReservationSystem.Repositories
 {
@@ -41,7 +42,7 @@ namespace RoomReservationSystem.Repositories
             // This requires modifying the stored procedure to return the RoomId, possibly via an OUT parameter
         }
 
-        public IEnumerable<Room> GetAllRooms(int? limit = null, int? offset = null)
+        public IEnumerable<Room> GetAllRooms(int? limit = null, int? offset = null, int? buildingId = null)
         {
             var rooms = new List<Room>();
 
@@ -49,6 +50,12 @@ namespace RoomReservationSystem.Repositories
             using var command = connection.CreateCommand();
             
             var sql = "SELECT * FROM rooms";
+            if (buildingId.HasValue)
+            {
+                sql += " WHERE building_id = :buildingId";
+            }
+            sql += " ORDER BY building_id, room_number";
+            
             if (offset.HasValue)
             {
                 sql += " OFFSET :offset ROWS";
@@ -61,6 +68,10 @@ namespace RoomReservationSystem.Repositories
             command.CommandText = sql;
             command.CommandType = CommandType.Text;
 
+            if (buildingId.HasValue)
+            {
+                command.Parameters.Add(new OracleParameter("buildingId", OracleDbType.Int32) { Value = buildingId.Value });
+            }
             if (offset.HasValue)
             {
                 command.Parameters.Add(new OracleParameter("offset", OracleDbType.Int32) { Value = offset.Value });
@@ -74,21 +85,60 @@ namespace RoomReservationSystem.Repositories
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                rooms.Add(new Room
-                {
-                    RoomId = Convert.ToInt32(reader["room_id"]),
-                    BuildingId = Convert.ToInt32(reader["building_id"]),
-                    RoomNumber = reader["room_number"].ToString(),
-                    Capacity = Convert.ToInt32(reader["capacity"]),
-                    HasProjector = reader["has_projector"].ToString() == "Y",
-                    HasWhiteboard = reader["has_whiteboard"].ToString() == "Y",
-                    Description = reader["description"].ToString(),
-                    Image = reader["image"] as byte[],
-                    Price = Convert.ToDecimal(reader["price"])
-                });
+                rooms.Add(MapRoomFromReader(reader));
             }
 
             return rooms;
+        }
+
+        public IEnumerable<Room> GetRandomRooms(int count)
+        {
+            var rooms = new List<Room>();
+
+            using var connection = _dbConnectionFactory.CreateConnection();
+            using var command = connection.CreateCommand();
+            
+            command.CommandText = "SELECT * FROM (SELECT * FROM rooms ORDER BY DBMS_RANDOM.VALUE) WHERE ROWNUM <= :count";
+            command.CommandType = CommandType.Text;
+            command.Parameters.Add(new OracleParameter("count", OracleDbType.Int32) { Value = count });
+
+            connection.Open();
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                rooms.Add(MapRoomFromReader(reader));
+            }
+
+            return rooms;
+        }
+
+        public IEnumerable<DateTime> GetReservedDates(int roomId, DateTime startDate, DateTime endDate)
+        {
+            var reservedDates = new List<DateTime>();
+
+            using var connection = _dbConnectionFactory.CreateConnection();
+            using var command = connection.CreateCommand();
+            
+            command.CommandText = @"
+                SELECT DISTINCT TRUNC(start_time) as reserved_date
+                FROM bookings
+                WHERE room_id = :roomId 
+                AND TRUNC(start_time) BETWEEN TRUNC(:startDate) AND TRUNC(:endDate)
+                ORDER BY reserved_date";
+            
+            command.CommandType = CommandType.Text;
+            command.Parameters.Add(new OracleParameter("roomId", OracleDbType.Int32) { Value = roomId });
+            command.Parameters.Add(new OracleParameter("startDate", OracleDbType.Date) { Value = startDate });
+            command.Parameters.Add(new OracleParameter("endDate", OracleDbType.Date) { Value = endDate });
+
+            connection.Open();
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                reservedDates.Add(Convert.ToDateTime(reader["reserved_date"]));
+            }
+
+            return reservedDates;
         }
 
         public Room GetRoomById(int roomId)
@@ -104,18 +154,7 @@ namespace RoomReservationSystem.Repositories
             using var reader = command.ExecuteReader();
             if (reader.Read())
             {
-                return new Room
-                {
-                    RoomId = Convert.ToInt32(reader["room_id"]),
-                    BuildingId = Convert.ToInt32(reader["building_id"]),
-                    RoomNumber = reader["room_number"].ToString(),
-                    Capacity = Convert.ToInt32(reader["capacity"]),
-                    HasProjector = reader["has_projector"].ToString() == "Y",
-                    HasWhiteboard = reader["has_whiteboard"].ToString() == "Y",
-                    Description = reader["description"].ToString(),
-                    Image = reader["image"] as byte[],
-                    Price = Convert.ToDecimal(reader["price"])
-                };
+                return MapRoomFromReader(reader);
             }
 
             return null;
@@ -153,6 +192,60 @@ namespace RoomReservationSystem.Repositories
 
             connection.Open();
             command.ExecuteNonQuery();
+        }
+
+        public IEnumerable<Booking> GetRoomReservations(int roomId, DateTime startDate, DateTime endDate)
+        {
+            var bookings = new List<Booking>();
+
+            using var connection = _dbConnectionFactory.CreateConnection();
+            using var command = connection.CreateCommand();
+            
+            command.CommandText = @"
+                SELECT booking_id, user_id, room_id, booking_date, start_time, end_time, status
+                FROM bookings
+                WHERE room_id = :roomId 
+                AND booking_date BETWEEN TRUNC(:startDate) AND TRUNC(:endDate)
+                ORDER BY booking_date, start_time";
+            
+            command.CommandType = CommandType.Text;
+            command.Parameters.Add(new OracleParameter("roomId", OracleDbType.Int32) { Value = roomId });
+            command.Parameters.Add(new OracleParameter("startDate", OracleDbType.Date) { Value = startDate });
+            command.Parameters.Add(new OracleParameter("endDate", OracleDbType.Date) { Value = endDate });
+
+            connection.Open();
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                bookings.Add(new Booking
+                {
+                    BookingId = Convert.ToInt32(reader["booking_id"]),
+                    UserId = Convert.ToInt32(reader["user_id"]),
+                    RoomId = Convert.ToInt32(reader["room_id"]),
+                    BookingDate = Convert.ToDateTime(reader["booking_date"]),
+                    StartTime = Convert.ToDateTime(reader["start_time"]),
+                    EndTime = Convert.ToDateTime(reader["end_time"]),
+                    Status = reader["status"].ToString()
+                });
+            }
+
+            return bookings;
+        }
+
+        private Room MapRoomFromReader(DbDataReader reader)
+        {
+            return new Room
+            {
+                RoomId = Convert.ToInt32(reader["room_id"]),
+                BuildingId = Convert.ToInt32(reader["building_id"]),
+                RoomNumber = reader["room_number"].ToString(),
+                Capacity = Convert.ToInt32(reader["capacity"]),
+                HasProjector = reader["has_projector"].ToString() == "Y",
+                HasWhiteboard = reader["has_whiteboard"].ToString() == "Y",
+                Description = reader["description"].ToString(),
+                Image = reader["image"] as byte[],
+                Price = Convert.ToDecimal(reader["price"])
+            };
         }
     }
 }

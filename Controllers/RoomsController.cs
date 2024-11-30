@@ -19,7 +19,7 @@ namespace RoomReservationSystem.Controllers
 
         [HttpGet]
         [AllowAnonymous]
-        public ActionResult<IEnumerable<Room>> GetAllRooms([FromQuery] int? limit = null, [FromQuery] int? offset = null)
+        public ActionResult<IEnumerable<Room>> GetAllRooms([FromQuery] int? limit = null, [FromQuery] int? offset = null, [FromQuery] int? buildingId = null)
         {
             // Для запросов без токена устанавливаем лимит
             if (!User.Identity.IsAuthenticated)
@@ -31,7 +31,20 @@ namespace RoomReservationSystem.Controllers
                 }
             }
 
-            var rooms = _roomRepository.GetAllRooms(limit, offset);
+            var rooms = _roomRepository.GetAllRooms(limit, offset, buildingId);
+            return Ok(new { list = rooms });
+        }
+
+        [HttpGet("random")]
+        [AllowAnonymous]
+        public ActionResult<IEnumerable<Room>> GetRandomRooms([FromQuery] int count = 3)
+        {
+            if (count <= 0 || count > 10)
+            {
+                return BadRequest(new { message = "Count must be between 1 and 10" });
+            }
+
+            var rooms = _roomRepository.GetRandomRooms(count);
             return Ok(new { list = rooms });
         }
 
@@ -44,6 +57,19 @@ namespace RoomReservationSystem.Controllers
                 return NotFound(new { message = "Room not found." });
 
             return Ok(new { room });
+        }
+
+        [HttpGet("{roomId}/reservations")]
+        [AllowAnonymous]
+        public ActionResult<IEnumerable<Booking>> GetRoomReservations(int roomId, [FromQuery] DateTime? startDate = null, [FromQuery] DateTime? endDate = null)
+        {
+            if (!startDate.HasValue)
+                startDate = DateTime.Today;
+            if (!endDate.HasValue)
+                endDate = startDate.Value.AddMonths(1);
+
+            var reservations = _roomRepository.GetRoomReservations(roomId, startDate.Value, endDate.Value);
+            return Ok(new { list = reservations });
         }
 
         [HttpPost]
