@@ -61,15 +61,22 @@ namespace RoomReservationSystem.Controllers
 
         [HttpGet("{roomId}/reservations")]
         [AllowAnonymous]
-        public ActionResult<IEnumerable<Booking>> GetRoomReservations(int roomId, [FromQuery] DateTime? startDate = null, [FromQuery] DateTime? endDate = null)
+        public ActionResult<IEnumerable<object>> GetRoomReservations(int roomId)
         {
-            if (!startDate.HasValue)
-                startDate = DateTime.Today;
-            if (!endDate.HasValue)
-                endDate = startDate.Value.AddMonths(1);
+            // Get all reservations for the room
+            var reservations = _roomRepository.GetRoomReservations(roomId, DateTime.MinValue, DateTime.MaxValue);
+            
+            // Transform reservations into time slots array
+            var timeSlots = reservations
+                .OrderBy(r => r.StartTime)
+                .Select(r => new[] 
+                {
+                    r.StartTime.ToString("yyyy-MM-dd HH:mm"),
+                    r.EndTime.ToString("yyyy-MM-dd HH:mm")
+                })
+                .ToList();
 
-            var reservations = _roomRepository.GetRoomReservations(roomId, startDate.Value, endDate.Value);
-            return Ok(new { list = reservations });
+            return Ok(timeSlots);
         }
 
         [HttpPost]
