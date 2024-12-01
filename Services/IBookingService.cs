@@ -14,5 +14,6 @@ namespace RoomReservationSystem.Services
         void DeleteBooking(int bookingId);
         IEnumerable<Invoice> GetUnpaidInvoices();
         IEnumerable<Invoice> GetUserInvoices(int userId);
+        bool MarkInvoiceAsPaid(int invoiceId);
     }
 }

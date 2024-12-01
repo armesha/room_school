@@ -164,7 +164,7 @@ namespace RoomReservationSystem.Controllers
 
         // GET: /api/bookings/user/invoices
         [HttpGet("user/invoices")]
-        [Authorize(Roles = "Registered User")]
+        [Authorize(Roles = "Administrator,Registered User")]
         public ActionResult<IEnumerable<Invoice>> GetUserInvoices()
         {
             var userIdClaim = User.FindFirstValue("UserId");
@@ -175,6 +175,20 @@ namespace RoomReservationSystem.Controllers
 
             var userInvoices = _bookingService.GetUserInvoices(userId); 
             return Ok(new { list = userInvoices });
+        }
+
+        // POST: /api/bookings/admin/invoices/{id}/mark-paid
+        [HttpPost("admin/invoices/{id}/mark-paid")]
+        [Authorize(Roles = "Administrator")]
+        public ActionResult MarkInvoiceAsPaid(int id)
+        {
+            var success = _bookingService.MarkInvoiceAsPaid(id);
+            if (!success)
+            {
+                return NotFound(new { message = "Invoice not found or already paid." });
+            }
+
+            return Ok(new { message = "Invoice marked as paid successfully." });
         }
     }
 }

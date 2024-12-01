@@ -53,5 +53,10 @@ namespace RoomReservationSystem.Services
         {
             return _bookingRepository.GetUserInvoices(userId); // Assuming this method exists in the repository
         }
+
+        public bool MarkInvoiceAsPaid(int invoiceId)
+        {
+            return _bookingRepository.MarkInvoiceAsPaid(invoiceId);
+        }
     }
 }

@@ -67,9 +67,18 @@ namespace RoomReservationSystem.Controllers
             if (response == null)
                 return Unauthorized(new { message = "Invalid credentials." });
 
+            // Set JWT token in HTTP-only cookie
+            Response.Cookies.Append("jwt_token", response.Token, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true, // Requires HTTPS
+                SameSite = SameSiteMode.Strict,
+                Expires = DateTime.UtcNow.AddMinutes(60) // Match the JWT expiration time
+            });
+
             return Ok(new
             {
-                token = response.Token,
+                token = response.Token, // Keep token in response
                 username = response.Username,
                 role = response.Role,
                 userId = response.UserId
@@ -81,6 +90,9 @@ namespace RoomReservationSystem.Controllers
         [Authorize] // Ensure that only authenticated users can access this endpoint
         public IActionResult Logout()
         {
+            // Remove the JWT cookie
+            Response.Cookies.Delete("jwt_token");
+
             // Extract the UserId from the JWT claims
             var userIdClaim = User.FindFirstValue("UserId");
             if (!int.TryParse(userIdClaim, out int userId))

@@ -243,5 +243,19 @@ namespace RoomReservationSystem.Repositories
             }
             return invoices;
         }
+
+        public bool MarkInvoiceAsPaid(int invoiceId)
+        {
+            using var connection = _connectionFactory.CreateConnection();
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"UPDATE invoices 
+                                   SET is_paid = 1 
+                                   WHERE invoice_id = :invoice_id";
+            command.Parameters.Add(new OracleParameter("invoice_id", OracleDbType.Int32) { Value = invoiceId });
+
+            int rowsAffected = command.ExecuteNonQuery();
+            return rowsAffected > 0;
+        }
     }
 }
